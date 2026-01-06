@@ -62,3 +62,9 @@ PC에 블루투스가 필요합니다.
 
 유저가 직접 폴더를 구성합니다.
 <a href="https://github.com/workforomg/Utill/raw/refs/heads/main/Story%20list%20Addon(user%20edit)-1.0.user.js">유저 편집추가</a>
+
+## 마지막 입력 복구 애드온
+유저가 입력한 채팅내역을 다시 불러옵니다.(전송 버튼 왼쪽에 추가.)
+입력칸에 이미 입력 되어있으면, 불러오지 않습니다.
+
+<a href="https://github.com/workforomg/Utill/raw/refs/heads/main/Chat%20Last%20Input%20Saver-1.0.user.js">마지막 입력기</a>
