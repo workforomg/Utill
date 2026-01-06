@@ -268,7 +268,7 @@
         modalOverlay.innerHTML = `
             <div class="vfx-modal">
                 <div class="vfx-modal-header">
-                    <span style="font-size:16px; font-weight:bold; color:#00ff88;">VFX Studio v9.0</span>
+                    <span style="font-size:16px; font-weight:bold; color:#00ff88;">VFX Studio</span>
                     <span class="vfx-close-btn" style="cursor:pointer; font-size:20px;">×</span>
                 </div>
                 <div class="vfx-tabs">
