@@ -55,3 +55,10 @@ PC에 블루투스가 필요합니다.
 
 사용법:
 <a href="https://gall.dcinside.com/m/wrtnai/882345">링크이동</a>
+
+## 폴더 애드온
+스토리를 인식하여 자동으로 분류합니다.
+<a href="https://github.com/workforomg/Utill/raw/refs/heads/main/Story%20list%20Addon(auto%20edit)-1.0.user.js">자동 편집추가</a>
+
+유저가 직접 폴더를 구성합니다.
+<a href="https://github.com/workforomg/Utill/raw/refs/heads/main/Story%20list%20Addon(user%20edit)-1.0.user.js">유저 편집추가</a>
