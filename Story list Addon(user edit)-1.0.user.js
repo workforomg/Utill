@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name         Crack Story list Addon(user edit)
-// @namespace    https://github.com/omgworks/Crack_util
+// @name         Story list Addon(user edit)
+// @namespace    https://github.com/workforomg/Utill
 // @version      1.0
 // @description  폴더생성, 유저 에딧
 // @author       으악갹
