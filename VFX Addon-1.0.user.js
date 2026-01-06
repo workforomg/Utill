@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name         Crack VFX Addon
-// @namespace    https://github.com/omgworks/Crack_util
+// @name         VFX Addon
+// @namespace    https://github.com/workforomg/Utill
 // @version      1.0
 // @description  VFX 기능 구현
 // @author       으악갹
