@@ -4,7 +4,7 @@
 // @version      1.0
 // @description  제목, @제작자, #태그(#언세이프, #세이프, #내부이미지) 필터링
 // @author       으악갹
-// @match        https://crack.wrtn.ai/liked?filter=story
+// @match        https://crack.wrtn.ai/liked
 // @grant        GM_addStyle
 // @run-at       document-end
 // ==/UserScript==
