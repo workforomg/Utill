@@ -1,3 +1,9 @@
+## 좋아요 검색기능 애드온
+좋아요 페이지에서 검색 기능을 추가합니다.
+
+<a href="https://github.com/workforomg/Utill/raw/refs/heads/main/like%20list%20search-1.0.user.js">좋아요 검색기능</a>
+
+---
 ## 마지막 입력 복구 애드온
 유저가 입력한 채팅내역을 다시 불러옵니다.(전송 버튼 왼쪽에 추가.)
 
