@@ -38,7 +38,7 @@
         }
 
         let css = '';
-        const currentSize = Math.max(50, Math.min(parseInt(savedSize) || 100, 110));
+        const currentSize = Math.max(50, Math.min(parseInt(savedSize) || 100, 120));
         const ratio = currentSize / 100;
 
         // 1. 폰트 적용 (설정 모달은 제외)
@@ -141,7 +141,7 @@
                     <input type="number" id="inp-size" class="f-input" value="${savedSize}" min="50" max="110">
                     <div class="f-info">
                         • 사이트 기본값: 100%<br>
-                        • 설정 범위: 50% ~ 110%
+                        • 설정 범위: 50% ~ 120%
                     </div>
                 </div>
                 <div class="f-footer">
@@ -164,7 +164,7 @@
         document.getElementById('btn-save').onclick = () => {
             savedFont = fontSelect.value;
             let val = parseInt(document.getElementById('inp-size').value);
-            savedSize = Math.max(50, Math.min(val, 110));
+            savedSize = Math.max(50, Math.min(val, 120));
             GM_setValue('customFont', savedFont);
             GM_setValue('customSize', savedSize);
             applyGlobalStyles();
