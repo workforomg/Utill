@@ -36,16 +36,16 @@
             styleTag.id = 'tm-font-style-block';
             document.head.appendChild(styleTag);
         }
-        
+
         let css = '';
-        const currentSize = Math.max(50, Math.min(parseInt(savedSize) || 100, 110));
+        const currentSize = Math.max(50, Math.min(parseInt(savedSize) || 100, 120));
         const ratio = currentSize / 100;
 
         // 1. 폰트 적용 (코드 블록 내부 포함, 설정 모달은 제외)
         if (savedFont !== "") {
             css += `
-                body *:not(#font-setting-modal *):not(.f-container *) { 
-                    font-family: ${savedFont}, "Pretendard", sans-serif !important; 
+                body *:not(#font-setting-modal *):not(.f-container *) {
+                    font-family: ${savedFont}, "Pretendard", sans-serif !important;
                 }
                 /* 코드 블록 전용 태그 강제 폰트 적용 */
                 pre, code, kbd, samp {
@@ -59,7 +59,7 @@
             css += `
                 /* 본문 핵심 변수 조절 */
                 :root { --wrtn-markdown-font-size: ${16 * ratio}px !important; }
-                
+
                 /* [업데이트] 코드 블록(pre, code) 및 내부 요소 강제 확대 */
                 pre, code, pre *, code * {
                     font-size: ${currentSize}% !important;
@@ -68,17 +68,17 @@
 
                 /* 일반 텍스트 요소 확대 (모달 제외) */
                 body *:not(#font-setting-modal *):not(.f-container *) {
-                    &[class*='typo-'], &[class*='text-primary'], &[class*='text-secondary'], 
+                    &[class*='typo-'], &[class*='text-primary'], &[class*='text-secondary'],
                     &[class*='text-gray-'], &.white-space-nowrap {
                         font-size: ${currentSize}% !important;
                     }
                 }
 
                 /* 표준 태그 확대 */
-                p, textarea, input, label, em, strong, li, a { 
+                p, textarea, input, label, em, strong, li, a {
                     &:not(#font-setting-modal *) { font-size: ${currentSize}% !important; }
                 }
-                
+
                 span:not([class*='typo-']):not(#font-setting-modal *) { font-size: inherit; }
 
                 /* 레이아웃 및 겹침 방지 */
@@ -146,7 +146,7 @@
                 <div class="f-group">
                     <label class="f-label">글씨 크기 (%)</label>
                     <input type="number" id="inp-size" class="f-input" value="${savedSize}" min="50" max="110">
-                    <div class="f-info">• 사이트 기본값: 100%<br>• 설정 범위: 50% ~ 110%</div>
+                    <div class="f-info">• 사이트 기본값: 100%<br>• 설정 범위: 50% ~ 120%</div>
                 </div>
                 <div class="f-footer">
                     <button id="btn-cancel" class="f-btn f-btn-cancel">취소</button>
@@ -168,7 +168,7 @@
         document.getElementById('btn-save').onclick = () => {
             savedFont = fontSelect.value;
             let val = parseInt(document.getElementById('inp-size').value);
-            savedSize = Math.max(50, Math.min(val, 110));
+            savedSize = Math.max(50, Math.min(val, 120));
             GM_setValue('customFont', savedFont);
             GM_setValue('customSize', savedSize);
             applyGlobalStyles();
