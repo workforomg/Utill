@@ -4,7 +4,7 @@
 // @version      1.1
 // @description  전송 버튼 바로 왼쪽에 밀착 배치 및 입력값 보호
 // @author       으악갹
-// @match        https://crack.wrtn.ai/*
+// @match        https://crack.wrtn.ai/stories/*
 // @grant        none
 // ==/UserScript==
 
