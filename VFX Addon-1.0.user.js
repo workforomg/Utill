@@ -4,7 +4,7 @@
 // @version      1.1
 // @description  VFX 기능 구현 (버그 수정판)
 // @author       으악갹
-// @match        https://crack.wrtn.ai/*
+// @match        https://crack.wrtn.ai/stories/*
 // @grant        GM_addStyle
 // @run-at       document-end
 // ==/UserScript==
