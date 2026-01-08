@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name         VFX Addon
 // @namespace    https://github.com/workforomg/Utill
-// @version      1.0
-// @description  VFX 기능 구현
+// @version      1.1
+// @description  VFX 기능 구현 (버그 수정판)
 // @author       으악갹
 // @match        https://crack.wrtn.ai/*
-// @grant        none
+// @grant        GM_addStyle
 // @run-at       document-end
 // ==/UserScript==
 
@@ -39,7 +39,7 @@
     let panelElement = null;
     let modalElement = null;
     let isAdvancedMode = false;
-    let currentEditingId = null; // 현재 수정 중인 ID (null이면 신규 생성)
+    let currentEditingId = null;
 
     const TARGET_CLASS_SELECTOR = '.wrtn-markdown';
     const AI_GENERATING_INDICATOR = '.css-194ns6b';
@@ -78,7 +78,7 @@
     }
 
     // ============================================================
-    // [1. CSS 스타일] - 아코디언 및 UI 개선
+    // [1. CSS 스타일]
     // ============================================================
     const css = `
         /* Main Button & Floating */
@@ -170,22 +170,36 @@
     // [2. UI 생성 & 로직]
     // ============================================================
 
-    function injectBannerButton() {
-        if (document.querySelector(".vfx-injector-btn") || document.querySelector(".vfx-floating-btn")) return;
+function injectBannerButton() {
+        // 중괄호 유지 (ESLint 대응)
+        if (document.querySelector(".vfx-injector-btn") || document.querySelector(".vfx-floating-btn")) {
+            return;
+        }
+
         const buttonCloned = document.createElement("button");
         buttonCloned.className = "vfx-injector-btn";
         buttonCloned.innerHTML = "✨ VFX";
+        buttonCloned.style.height = "32px";
+        buttonCloned.style.fontSize = "12px";
 
-        let targetContainer = document.querySelector(".css-1bhbevm.eh9908w0");
-        if (!targetContainer) {
-            const potential = document.querySelectorAll(".css-1bhbevm, .css-l8r172");
-            for (const el of potential) { if (el.offsetParent !== null) { targetContainer = el; break; } }
-        }
+        // 검색할 키워드 목록을 배열로 만듭니다. (원하는 텍스트를 이곳에 추가하세요)
+        const targetKeywords = ["챗"];
+
+        let targetContainer = document.querySelector("div.flex.gap-3.items-center");
 
         if (targetContainer) {
-            const chasmButton = targetContainer.querySelector(".burner-button");
-            if (chasmButton) targetContainer.insertBefore(buttonCloned, chasmButton);
-            else targetContainer.insertBefore(buttonCloned, targetContainer.firstChild);
+            // 키워드 배열 중 하나라도 포함된 요소를 찾습니다.
+            const targetWrapper = Array.from(targetContainer.children).find((el) => {
+                return targetKeywords.some((keyword) => {
+                    return el.textContent.includes(keyword);
+                });
+            });
+
+            if (targetWrapper) {
+                targetContainer.insertBefore(buttonCloned, targetWrapper);
+            } else {
+                targetContainer.prepend(buttonCloned);
+            }
         } else {
             buttonCloned.className = "vfx-floating-btn";
             document.body.appendChild(buttonCloned);
@@ -193,7 +207,9 @@
 
         buttonCloned.addEventListener("click", (e) => {
             e.stopPropagation();
-            if (!panelElement) createQuickPanel();
+            if (!panelElement) {
+                createQuickPanel();
+            }
             if (panelElement.style.display === 'none') {
                 const rect = buttonCloned.getBoundingClientRect();
                 panelElement.style.top = `${rect.bottom + 8}px`;
@@ -231,7 +247,9 @@
     }
 
     function refreshQuickPanelItems() {
-        if (!panelElement) return;
+        if (!panelElement) {
+            return;
+        }
         const container = panelElement.querySelector('#vfx-quick-content');
         container.innerHTML = '';
 
@@ -239,23 +257,62 @@
             const row = document.createElement('div');
             row.className = 'vfx-toggle-row';
             row.innerHTML = `<span class="vfx-toggle-label">${label}</span><div class="vfx-indicator ${isOn ? 'on' : ''}"></div>`;
-            row.onclick = (e) => { e.stopPropagation(); onClick(); };
-            if(!isOn) row.querySelector('.vfx-toggle-label').style.opacity = '0.5';
+            row.onclick = (e) => {
+                e.stopPropagation();
+                onClick();
+            };
+            if(!isOn) {
+                row.querySelector('.vfx-toggle-label').style.opacity = '0.5';
+            }
             return row;
         };
 
         container.appendChild(createRow('전체 효과 토글', config.isMasterOn, () => {
-             config.isMasterOn = !config.isMasterOn;
-             saveConfig(); refreshQuickPanelItems();
+            config.isMasterOn = !config.isMasterOn;
+            if (!config.isMasterOn) {
+                config.savedState = {
+                    effects: Object.values(config.effects).filter(ef => ef.enabled).map(ef => ef.id),
+                    presets: config.userPresets.map((p, idx) => p.enabled ? idx : null).filter(idx => idx !== null)
+                };
+                Object.values(config.effects).forEach(ef => { ef.enabled = false; });
+                config.userPresets.forEach(p => { p.enabled = false; });
+            } else {
+                if (config.savedState) {
+                    config.savedState.effects.forEach(id => {
+                        if (config.effects[id]) { config.effects[id].enabled = true; }
+                    });
+                    config.savedState.presets.forEach(idx => {
+                        if (config.userPresets[idx]) { config.userPresets[idx].enabled = true; }
+                    });
+                }
+                config.savedState = null;
+            }
+            saveConfig();
+            refreshQuickPanelItems();
         }));
-        const hr = document.createElement('div'); hr.style.cssText = "height:1px; background:rgba(255,255,255,0.1); margin:4px 0;"; container.appendChild(hr);
+
+        const hr = document.createElement('div');
+        hr.style.cssText = "height:1px; background:rgba(255,255,255,0.1); margin:4px 0;";
+        container.appendChild(hr);
 
         Object.values(config.effects).forEach(ef => {
-            if (ef.active) container.appendChild(createRow(ef.name, ef.enabled, () => { config.effects[ef.id].enabled = !config.effects[ef.id].enabled; saveConfig(); refreshQuickPanelItems(); }));
+            if (ef.active) {
+                container.appendChild(createRow(ef.name, ef.enabled, () => {
+                    config.effects[ef.id].enabled = !config.effects[ef.id].enabled;
+                    saveConfig();
+                    refreshQuickPanelItems();
+                }));
+            }
         });
 
         config.userPresets.forEach((pre, idx) => {
-            if (pre.active) container.appendChild(createRow(`[U] ${pre.name}`, pre.enabled, () => { config.userPresets[idx].enabled = !config.userPresets[idx].enabled; saveConfig(); refreshQuickPanelItems(); }));
+            if (pre.active) {
+                container.appendChild(createRow(`[U] ${pre.name}`, pre.enabled, () => {
+                    config.userPresets[idx].enabled = !config.userPresets[idx].enabled;
+                    saveConfig();
+                    refreshQuickPanelItems();
+                }));
+            }
         });
     }
 
@@ -401,15 +458,29 @@
         refreshTabs();
     }
 
+    // [버그 수정됨] innerHTML += 사용 금지 (이벤트 리스너 보존을 위해 appendChild 사용)
     function refreshTabs() {
         // 1. 활성화 탭 (체크박스)
         const activeTab = document.getElementById('tab-activation');
         activeTab.innerHTML = '';
         const actList = document.createElement('div');
-        actList.innerHTML = '<div class="vfx-gui-title">기본 효과</div>';
+
+        // 기본 효과 타이틀
+        const defTitle = document.createElement('div');
+        defTitle.className = 'vfx-gui-title';
+        defTitle.innerText = '기본 효과';
+        actList.appendChild(defTitle);
+
         Object.values(config.effects).forEach(ef => actList.appendChild(createCheckItem(ef, false)));
+
         if(config.userPresets.length > 0) {
-            actList.innerHTML += '<div class="vfx-gui-title" style="margin-top:15px">사용자 효과</div>';
+            // 사용자 효과 타이틀 (createElement 사용)
+            const userTitle = document.createElement('div');
+            userTitle.className = 'vfx-gui-title';
+            userTitle.style.marginTop = '15px';
+            userTitle.innerText = '사용자 효과';
+            actList.appendChild(userTitle);
+
             config.userPresets.forEach((pre, idx) => actList.appendChild(createCheckItem(pre, true, idx)));
         }
         activeTab.appendChild(actList);
