@@ -36,40 +36,52 @@
             styleTag.id = 'tm-font-style-block';
             document.head.appendChild(styleTag);
         }
-
+        
         let css = '';
-        const currentSize = Math.max(50, Math.min(parseInt(savedSize) || 100, 120));
+        const currentSize = Math.max(50, Math.min(parseInt(savedSize) || 100, 110));
         const ratio = currentSize / 100;
 
-        // 1. 폰트 적용 (설정 모달은 제외)
+        // 1. 폰트 적용 (코드 블록 내부 포함, 설정 모달은 제외)
         if (savedFont !== "") {
-            css += `body *:not(#font-setting-modal *):not(.f-container *) { font-family: ${savedFont}, "Pretendard", sans-serif !important; }`;
+            css += `
+                body *:not(#font-setting-modal *):not(.f-container *) { 
+                    font-family: ${savedFont}, "Pretendard", sans-serif !important; 
+                }
+                /* 코드 블록 전용 태그 강제 폰트 적용 */
+                pre, code, kbd, samp {
+                    font-family: ${savedFont}, monospace !important;
+                }
+            `;
         }
 
-        // 2. 글씨 크기 적용 (모달 제외 및 레이아웃 붕괴 방지)
+        // 2. 글씨 크기 적용 (중첩 방지 및 코드 블록 대응)
         if (currentSize !== 100) {
             css += `
                 /* 본문 핵심 변수 조절 */
                 :root { --wrtn-markdown-font-size: ${16 * ratio}px !important; }
+                
+                /* [업데이트] 코드 블록(pre, code) 및 내부 요소 강제 확대 */
+                pre, code, pre *, code * {
+                    font-size: ${currentSize}% !important;
+                    line-height: 1.4 !important;
+                }
 
-                /* 텍스트 요소들만 골라 확대 (모달 내부 제외) */
+                /* 일반 텍스트 요소 확대 (모달 제외) */
                 body *:not(#font-setting-modal *):not(.f-container *) {
-                    /* typo- 클래스 및 주요 텍스트 클래스 대응 */
-                    &[class*='typo-'], &[class*='text-primary'], &[class*='text-secondary'],
+                    &[class*='typo-'], &[class*='text-primary'], &[class*='text-secondary'], 
                     &[class*='text-gray-'], &.white-space-nowrap {
                         font-size: ${currentSize}% !important;
                     }
                 }
 
-                /* 태그 기반 확대 (중첩 방지를 위해 span은 inherit 처리) */
-                p, textarea, input, label, em, strong, li, a {
+                /* 표준 태그 확대 */
+                p, textarea, input, label, em, strong, li, a { 
                     &:not(#font-setting-modal *) { font-size: ${currentSize}% !important; }
                 }
-
+                
                 span:not([class*='typo-']):not(#font-setting-modal *) { font-size: inherit; }
 
-                /* [버그 수정] 상단 쏠림 및 텍스트 겹침 방지 */
-                /* 구조적 div의 height는 건드리지 않고 텍스트 관련 div만 유연하게 설정 */
+                /* 레이아웃 및 겹침 방지 */
                 .css-rfcrl5, .css-1fy19s2, .css-b6k6hx, .css-1821gv5, .css-v3ezgq {
                     font-size: ${currentSize}% !important;
                     line-height: 1.5 !important;
@@ -82,7 +94,7 @@
 
     applyGlobalStyles();
 
-    // 버튼 주입 로직 (이미지 65b18d.png 위치)
+    // 버튼 주입 로직
     const injectButton = () => {
         if (document.getElementById('font-setting-item')) return;
         const settingsLink = document.querySelector('a[href="/setting"]');
@@ -105,23 +117,18 @@
         settingsLink.parentNode.insertBefore(fontBtn, settingsLink.nextSibling);
     };
 
-    // 모달 UI (설정 영향을 받지 않도록 별도 스타일 지정)
+    // 설정 모달 UI
     const showModal = () => {
         if (document.getElementById('font-setting-modal')) return;
         const modalOverlay = document.createElement('div');
         modalOverlay.id = 'font-setting-modal';
-
         GM_addStyle(`
             #font-setting-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 999999; display: flex; justify-content: center; align-items: center; }
-            .f-container {
-                background: var(--bg_elevated_primary, #1e1e1e); border: 1px solid var(--divider_secondary, #333);
-                padding: 24px; border-radius: 16px; width: 340px; color: var(--text_primary, #fff) !important;
-                box-shadow: 0 10px 30px rgba(0,0,0,0.5); font-family: sans-serif !important; font-size: 14px !important;
-            }
-            .f-header { font-size: 18px !important; font-weight: bold !important; margin-bottom: 20px; text-align: center; font-family: sans-serif !important; }
+            .f-container { background: var(--bg_elevated_primary, #1e1e1e); border: 1px solid var(--divider_secondary, #333); padding: 24px; border-radius: 16px; width: 340px; color: var(--text_primary, #fff) !important; box-shadow: 0 10px 30px rgba(0,0,0,0.5); font-family: sans-serif !important; font-size: 14px !important; }
+            .f-header { font-size: 18px !important; font-weight: bold !important; margin-bottom: 20px; text-align: center; }
             .f-group { margin-bottom: 18px; }
             .f-label { display: block; font-size: 13px !important; color: var(--text_secondary, #aaa) !important; margin-bottom: 8px; }
-            .f-select, .f-input { width: 100%; background: var(--bg_screen, #121212); border: 1px solid var(--outline_secondary, #444); color: #fff !important; padding: 10px; border-radius: 8px; box-sizing: border-box; font-size: 14px !important; font-family: sans-serif !important; }
+            .f-select, .f-input { width: 100%; background: var(--bg_screen, #121212); border: 1px solid var(--outline_secondary, #444); color: #fff !important; padding: 10px; border-radius: 8px; box-sizing: border-box; font-size: 14px !important; }
             .f-footer { display: flex; gap: 10px; margin-top: 20px; }
             .f-btn { flex: 1; padding: 12px; border-radius: 8px; cursor: pointer; border: none; font-weight: bold !important; font-size: 14px !important; }
             .f-btn-save { background: var(--surface_brand_primary, #ff4432); color: #fff !important; }
@@ -139,10 +146,7 @@
                 <div class="f-group">
                     <label class="f-label">글씨 크기 (%)</label>
                     <input type="number" id="inp-size" class="f-input" value="${savedSize}" min="50" max="110">
-                    <div class="f-info">
-                        • 사이트 기본값: 100%<br>
-                        • 설정 범위: 50% ~ 120%
-                    </div>
+                    <div class="f-info">• 사이트 기본값: 100%<br>• 설정 범위: 50% ~ 110%</div>
                 </div>
                 <div class="f-footer">
                     <button id="btn-cancel" class="f-btn f-btn-cancel">취소</button>
@@ -164,7 +168,7 @@
         document.getElementById('btn-save').onclick = () => {
             savedFont = fontSelect.value;
             let val = parseInt(document.getElementById('inp-size').value);
-            savedSize = Math.max(50, Math.min(val, 120));
+            savedSize = Math.max(50, Math.min(val, 110));
             GM_setValue('customFont', savedFont);
             GM_setValue('customSize', savedSize);
             applyGlobalStyles();
