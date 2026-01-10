@@ -1,3 +1,8 @@
+## 채팅방 이름 검색 애드온
+채팅방의 이름으로 검색하는 입력칸을 추가합니다. (공백무시)
+<a href="https://github.com/workforomg/Utill/raw/refs/heads/main/chat%20search.user.js">채팅방 검색</a>
+
+---
 ## 폰트 및 사이즈설정 애드온
 폰트 및 사이즈를 조절 하는 버튼을 추가합니다.
 
