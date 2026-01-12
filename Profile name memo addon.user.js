@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Profile name memo addon
 // @namespace    https://github.com/workforomg/Utill
-// @version      1.0
-// @description  프로필 메모 애드온
+// @version      1.1
+// @description  이름이 동일시, 메모가 곂치던 버그 수정.
 // @author       으악갹
 // @match        https://crack.wrtn.ai/*
 // @grant        none
@@ -11,7 +11,6 @@
 (function() {
     'use strict';
 
-    // 1. 스타일 설정 (어두운 배경 팝업 디자인)
     const style = document.createElement('style');
     style.innerHTML = `
         .memo-text-display { color: #ffa500 !important; font-size: 12px !important; margin-left: 8px !important; font-weight: 500 !important; }
@@ -32,43 +31,39 @@
     `;
     document.head.appendChild(style);
 
-    const getMemos = () => JSON.parse(localStorage.getItem('char_memos') || '{}');
-    const saveMemo = (name, text) => {
+    const getMemos = () => JSON.parse(localStorage.getItem('char_memos_absolute') || '{}');
+    const saveMemo = (id, text) => {
         const memos = getMemos();
-        if (!text.trim()) delete memos[name];
-        else memos[name] = text;
-        localStorage.setItem('char_memos', JSON.stringify(memos));
+        if (!text.trim()) delete memos[id];
+        else memos[id] = text;
+        localStorage.setItem('char_memos_absolute', JSON.stringify(memos));
     };
 
-    const isTargetPage = () => {
-        const url = window.location.href;
-        return url.includes('chat?menu=chat_profile') || url.includes('/stories/');
+    // 현재 페이지에서 해당 요소가 몇 번째 캐릭터인지 계산
+    const getAbsoluteIndex = (targetElement, selector) => {
+        const allElements = Array.from(document.querySelectorAll(selector));
+        return allElements.indexOf(targetElement);
     };
 
-    // 캐릭터 리스트 내부 주입 (설정 페이지 전용)
     function injectToCharacterList() {
-        if (!isTargetPage()) return;
+        // 캐릭터를 감싸는 전체 행 선택
+        const charRows = Array.from(document.querySelectorAll('.css-1s5md62')).filter(row => row.querySelector('p[color="text_primary"]'));
 
-        // .css-1dvnp5e 내부의 캐릭터 이름들만 선택
-        const charContainers = document.querySelectorAll('.css-1dvnp5e p[color="text_primary"]');
+        charRows.forEach((row, index) => {
+            const nameTag = row.querySelector('p[color="text_primary"]');
+            if (!nameTag || nameTag.innerText === "대화 프로필" || nameTag.dataset.memoApplied === 'true') return;
 
-        charContainers.forEach(nameTag => {
-            // "대화 프로필" 같은 제목 제외 (텍스트로 필터링)
-            if (nameTag.innerText === "대화 프로필" || nameTag.dataset.memoApplied === 'true') return;
-
+            // 고유 ID: 이름 + 페이지 내 절대 순서
             const charName = nameTag.innerText.trim();
+            const charId = `pos_${index}_${charName}`;
+
             nameTag.dataset.memoApplied = 'true';
 
-            // 1. 이름 옆 메모 텍스트 표시
             const textSpan = document.createElement('span');
             textSpan.className = 'memo-text-display';
             nameTag.appendChild(textSpan);
 
-            // 2. 우측 점 세 개 버튼 왼쪽에 수정 버튼 삽입
-            const parentRow = nameTag.closest('.css-1s5md62'); // 이름과 버튼을 감싸는 행
-            if (!parentRow) return;
-
-            const menuBtn = parentRow.querySelector('button[aria-haspopup="menu"]');
+            const menuBtn = row.querySelector('button[aria-haspopup="menu"]');
             if (!menuBtn) return;
 
             const btnWrapper = document.createElement('span');
@@ -76,7 +71,7 @@
             menuBtn.before(btnWrapper);
 
             const updateUI = () => {
-                const memo = getMemos()[charName] || "";
+                const memo = getMemos()[charId] || "";
                 textSpan.innerText = memo ? ` - ${memo}` : "";
                 btnWrapper.innerHTML = '';
                 const editBtn = document.createElement('button');
@@ -84,7 +79,7 @@
                 editBtn.innerText = memo ? '수정' : '메모';
                 editBtn.onclick = (e) => {
                     e.preventDefault(); e.stopPropagation();
-                    renderEditUI(editBtn, charName, updateUI);
+                    renderEditUI(editBtn, charId, updateUI);
                 };
                 btnWrapper.appendChild(editBtn);
             };
@@ -92,15 +87,18 @@
         });
     }
 
-    // 드롭다운 메모 표시 (상시)
     function injectToDropdown() {
-        document.querySelectorAll('div[role="option"]').forEach(option => {
+        const options = document.querySelectorAll('div[role="option"]');
+        options.forEach((option, index) => {
             if (option.dataset.memoDone === 'true') return;
             const nameSpan = option.querySelector('span[id^="radix-"]');
             if (!nameSpan) return;
 
             const charName = nameSpan.innerText.trim();
-            const memo = getMemos()[charName];
+            // 드롭다운의 순서와 리스트의 순서가 동일하다고 가정 (pos_순서_이름)
+            const charId = `pos_${index}_${charName}`;
+
+            const memo = getMemos()[charId];
             if (memo) {
                 const mSpan = document.createElement('span');
                 mSpan.className = 'memo-dropdown-text';
@@ -111,7 +109,7 @@
         });
     }
 
-    function renderEditUI(anchor, charName, callback) {
+    function renderEditUI(anchor, charId, callback) {
         const existing = document.querySelector('.memo-input-box');
         if (existing) existing.remove();
         const box = document.createElement('div');
@@ -122,13 +120,13 @@
 
         const input = document.createElement('input');
         input.className = 'memo-input';
-        input.value = getMemos()[charName] || "";
+        input.value = getMemos()[charId] || "";
 
         const btn = document.createElement('button');
         btn.className = 'confirm-btn';
         btn.innerText = '저장';
 
-        const save = () => { saveMemo(charName, input.value); callback(); box.remove(); };
+        const save = () => { saveMemo(charId, input.value); callback(); box.remove(); };
         btn.onclick = save;
         input.onkeydown = (e) => { if (e.key === 'Enter') save(); };
 
@@ -138,6 +136,7 @@
         input.focus();
     }
 
+    // 뤼튼의 경우 요소가 동적으로 계속 로딩되므로 감시를 강화
     const observer = new MutationObserver(() => {
         injectToCharacterList();
         injectToDropdown();
