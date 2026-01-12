@@ -2,7 +2,7 @@
 // @name         Profile name memo addon
 // @namespace    https://github.com/workforomg/Utill
 // @version      1.1
-// @description  이름이 동일시, 메모가 곂치던 버그 수정.
+// @description  이름이 동일시, 메모가 겹치던 버그 수정.
 // @author       으악갹
 // @match        https://crack.wrtn.ai/*
 // @grant        none
