@@ -39,26 +39,36 @@
         localStorage.setItem('char_memos_absolute', JSON.stringify(memos));
     };
 
-    // 현재 페이지에서 해당 요소가 몇 번째 캐릭터인지 계산
-    const getAbsoluteIndex = (targetElement, selector) => {
-        const allElements = Array.from(document.querySelectorAll(selector));
-        return allElements.indexOf(targetElement);
+    // [변경] 입력 중인 내용이 있을 경우 확인 후 제거
+    const safeRemoveInputBox = () => {
+        const box = document.querySelector('.memo-input-box');
+        if (!box) return true;
+
+        const input = box.querySelector('.memo-input');
+        const charId = box.dataset.activeId;
+        const originalMemo = getMemos()[charId] || "";
+
+        // 원래 내용과 다르다면(수정 중이었다면) 경고창 표시
+        if (input.value !== originalMemo) {
+            if (!confirm("메모 작성을 취소하시겠습니까?")) {
+                return false; // 취소 안 함
+            }
+        }
+        box.remove();
+        return true;
     };
 
     function injectToCharacterList() {
-        // 캐릭터를 감싸는 전체 행 선택
         const charRows = Array.from(document.querySelectorAll('.css-1s5md62')).filter(row => row.querySelector('p[color="text_primary"]'));
 
         charRows.forEach((row, index) => {
             const nameTag = row.querySelector('p[color="text_primary"]');
             if (!nameTag || nameTag.innerText === "대화 프로필" || nameTag.dataset.memoApplied === 'true') return;
 
-            // 고유 ID: 이름 + 페이지 내 절대 순서
             const charName = nameTag.innerText.trim();
             const charId = `pos_${index}_${charName}`;
 
             nameTag.dataset.memoApplied = 'true';
-
             const textSpan = document.createElement('span');
             textSpan.className = 'memo-text-display';
             nameTag.appendChild(textSpan);
@@ -93,11 +103,8 @@
             if (option.dataset.memoDone === 'true') return;
             const nameSpan = option.querySelector('span[id^="radix-"]');
             if (!nameSpan) return;
-
             const charName = nameSpan.innerText.trim();
-            // 드롭다운의 순서와 리스트의 순서가 동일하다고 가정 (pos_순서_이름)
             const charId = `pos_${index}_${charName}`;
-
             const memo = getMemos()[charId];
             if (memo) {
                 const mSpan = document.createElement('span');
@@ -110,25 +117,38 @@
     }
 
     function renderEditUI(anchor, charId, callback) {
-        const existing = document.querySelector('.memo-input-box');
-        if (existing) existing.remove();
+        if (!safeRemoveInputBox()) return; // 이전 창 닫기 실패 시 중단
+
         const box = document.createElement('div');
         box.className = 'memo-input-box';
+        box.dataset.activeId = charId; // 현재 ID 추적용
+
         const rect = anchor.getBoundingClientRect();
         box.style.top = `${window.scrollY + rect.top - 45}px`;
         box.style.left = `${window.scrollX + rect.left}px`;
 
         const input = document.createElement('input');
         input.className = 'memo-input';
-        input.value = getMemos()[charId] || "";
+        const currentMemo = getMemos()[charId] || "";
+        input.value = currentMemo;
 
         const btn = document.createElement('button');
         btn.className = 'confirm-btn';
         btn.innerText = '저장';
 
-        const save = () => { saveMemo(charId, input.value); callback(); box.remove(); };
-        btn.onclick = save;
-        input.onkeydown = (e) => { if (e.key === 'Enter') save(); };
+        const save = () => {
+            saveMemo(charId, input.value);
+            callback();
+            box.remove();
+        };
+
+        btn.onclick = (e) => { e.stopPropagation(); save(); };
+        input.onkeydown = (e) => {
+            if (e.key === 'Enter') save();
+            if (e.key === 'Escape') safeRemoveInputBox();
+        };
+
+        box.onclick = (e) => e.stopPropagation();
 
         box.appendChild(input);
         box.appendChild(btn);
@@ -136,11 +156,44 @@
         input.focus();
     }
 
-    // 뤼튼의 경우 요소가 동적으로 계속 로딩되므로 감시를 강화
+    // 외부 클릭 시 안전하게 제거 시도
+    document.addEventListener('mousedown', (e) => {
+        const box = document.querySelector('.memo-input-box');
+        if (box && !box.contains(e.target) && !e.target.closest('.action-btn')) {
+            safeRemoveInputBox();
+        }
+    }, true);
+
+    // URL 변경 시 안전하게 제거 시도
+    let lastUrl = location.href;
+    const urlObserver = new MutationObserver(() => {
+        if (location.href !== lastUrl) {
+            lastUrl = location.href;
+            const box = document.querySelector('.memo-input-box');
+            if (box) {
+                // SPA 특성상 바로 confirm을 띄우면 페이지 이동과 엉킬 수 있어 즉시 체크
+                const input = box.querySelector('.memo-input');
+                const charId = box.dataset.activeId;
+                if (input.value !== (getMemos()[charId] || "")) {
+                    if (confirm("작성 중인 메모가 있습니다. 페이지를 이동하시겠습니까?")) {
+                        box.remove();
+                    } else {
+                        // 사용자가 취소를 눌렀을 경우 URL을 원래대로 돌리는 것은 기술적으로 복잡하므로
+                        // 보통은 이동 방지보다는 "알림" 역할에 집중합니다.
+                        box.remove();
+                    }
+                } else {
+                    box.remove();
+                }
+            }
+        }
+    });
+    urlObserver.observe(document.body, { childList: true, subtree: true });
+
     const observer = new MutationObserver(() => {
         injectToCharacterList();
         injectToDropdown();
     });
-
     observer.observe(document.body, { childList: true, subtree: true });
+
 })();
