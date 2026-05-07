@@ -1,6 +1,7 @@
 // ==UserScript==
 // @name         크랙용 댓글 기록
-// @namespace    으악갹, gemini
+// @namespace    https://github.com/workforomg/Utill
+// @author       으악갹, gemini
 // @version      1.0
 // @description  유저 제공 풀 셀렉터 정밀 반영 + 댓글 서치 최적화 + 개별 삭제
 // @match        https://crack.wrtn.ai/*
@@ -217,6 +218,14 @@
                         </div>
                     </div>
                 </div>
+                <div style="margin-top: 80px; padding: 40px 0; border-top: 1px solid var(--border); text-align: center;">
+                        <p style="font-size: 12px; color: #666; margin-bottom: 8px;">본 페이지는 유저 편의를 위해 제작되었으며 뤼튼 크랙 서비스와 무관합니다.</p>
+                        <p style="font-size: 12px; color: #666; margin-bottom: 24px;">문제 소지가 있을 경우 확인 후 수정 또는 삭제하겠습니다. </p>
+                        <button onclick="if(confirm('모든 활동 기록을 삭제할까요?')){localStorage.removeItem('${DB_KEY}'); location.reload();}"
+                                style="background: none; border: 1px solid #444; color: #555; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 11px;">
+                            활동 기록 전체 초기화
+                        </button>
+                    </div>
             </div>`;
         }
     }
