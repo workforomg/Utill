@@ -1,5 +1,9 @@
 # 모든 애드온은 템퍼몽키(Tampermokey)확장프로그램이 필요합니다.
 
+## #프롬프트 크게보기, 및 제작에서 있는 미리보기 전송 실수 방지.
+<a href="https://github.com/workforomg/Utill/raw/refs/heads/main/creater%20tool.user.js">작자 프롬프트 ui 개조</a>
+오른쪽 섹션을 접었다 필수 있는 버튼을 추가합니다.
+실수로 인한 미리보기 전송을 막습니다.
 
 ## #댓글 서치 및 기록 애드온
 내가 쓴 댓글을 찾습니다. 
