@@ -1,5 +1,10 @@
 # 모든 애드온은 템퍼몽키(Tampermokey)확장프로그램이 필요합니다.
 
+## #작자 프롬프트 필터링 우회 애드오
+특정 단어에 유령문자를 삽입합니다.
+
+<a href="https://github.com/workforomg/Utill/raw/refs/heads/main/filtering%20bypass.user.js">필터링 단어 우회</a>
+
 ## #작자 프롬프트 UI개조 애드온
 <a href="https://github.com/workforomg/Utill/raw/refs/heads/main/creater%20tool.user.js">작자 프롬프트 ui 개조</a>
 오른쪽 섹션을 접었다 필수 있는 버튼을 추가합니다.
