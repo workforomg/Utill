@@ -1,8 +1,9 @@
 // ==UserScript==
 // @name         크랙용 댓글 기록
-// @namespace    으악갹, gemini
+// @namespace    https://github.com/workforomg/Utill
 // @version      1.0
 // @description  댓글 기록
+// @author       으악갹, gemini
 // @match        https://crack.wrtn.ai/*
 // @grant        none
 // ==/UserScript==
