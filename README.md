@@ -1,6 +1,13 @@
 # 모든 애드온은 템퍼몽키(Tampermokey)확장프로그램이 필요합니다.
 
-## #작자 프롬프트 필터링 우회 애드오
+## #모든 방 세션 링크 저장 애드온
+모든 방의 고유 url을 리스트로 저장합니다.
+보관함은 별개로 실행해야합니다.
+
+<a href="https://github.com/workforomg/Utill/raw/refs/heads/main/session%20link%20collector.user.js"세션 목록 저장</a>
+
+
+## #작자 프롬프트 필터링 우회 애드온
 특정 단어에 유령문자를 삽입합니다.
 
 <a href="https://github.com/workforomg/Utill/raw/refs/heads/main/filtering%20bypass.user.js">필터링 단어 우회</a>
