@@ -1,5 +1,11 @@
 # 모든 애드온은 템퍼몽키(Tampermokey)확장프로그램이 필요합니다.
 
+## #보관함 폴딩 애드온
+보관함을 접습니다.
+
+<a href="https://github.com/workforomg/Utill/raw/refs/heads/main/folder%20folding.user.js">보관함 폴딩</a>
+
+
 ## #모든 방 세션 링크 저장 애드온
 모든 방의 고유 url을 리스트로 저장합니다.
 보관함은 별개로 실행해야합니다.
