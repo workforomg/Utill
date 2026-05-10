@@ -55,7 +55,7 @@
 <a href="https://github.com/workforomg/Utill/raw/refs/heads/main/Chat%20Last%20Input%20Saver-1.0.user.js">마지막 입력기</a>
 
 ---
-## #폴더 애드온 < 크랙의 자체적인 기능 업데이트로 인해 유지보수 중단.
+## #(지원중단)폴더 애드온 < 크랙의 자체적인 기능 업데이트로 인해 유지보수 중단.
 스토리를 인식하여 자동으로 분류합니다.
 <a href="https://github.com/workforomg/Utill/raw/refs/heads/main/Story%20list%20Addon(auto%20edit)-1.0.user.js">자동 편집추가</a>
 
