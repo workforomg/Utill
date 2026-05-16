@@ -1,5 +1,10 @@
 # 모든 애드온은 템퍼몽키(Tampermokey)확장프로그램이 필요합니다.
 
+## #출력 턴 수집 및 턴이동 애드온
+ai가 출력한 턴을 수집하여 표시하고, 네비게이터로 해당 턴으로 이동합니다.
+
+<a href="https://github.com/workforomg/Utill/raw/refs/heads/main/ai%20turn%20collect%20and%20navi.user.js">턴 수집 및 턴 이동</a>
+
 ## #보관함 폴딩 애드온
 보관함을 접습니다.
 
