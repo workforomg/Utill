@@ -1,5 +1,10 @@
 # 모든 애드온은 템퍼몽키(Tampermokey)확장프로그램이 필요합니다.
 
+## #유저노트 편의성 확장 애드온
+유저노트에 미리 준비된 프리셋을 적용하거나 뺍니다.
+
+<a href="https://github.com/workforomg/Utill/raw/refs/heads/main/expand%20usernote.user.js">유저노트 편의 확장</a>
+
 ## #출력 턴 수집 및 턴이동 애드온
 ai가 출력한 턴을 수집하여 표시하고, 네비게이터로 해당 턴으로 이동합니다.
 
