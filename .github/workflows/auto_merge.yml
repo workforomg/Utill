@@ -1,0 +1,39 @@
+name: Auto Merge Preset JSONs
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'command list/preset/**'
+
+jobs:
+  build-and-merge:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+
+    steps:
+      - name: 저장소 코드 가져오기
+        uses: actions/checkout@v4
+
+      - name: 파이썬 환경 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: 파이썬 병합 스크립트 실행
+        working-directory: 'command list'  # <--- 이 폴더 안에서 파이썬을 실행하라는 핵심 명령어
+        run: python merge.py
+
+      - name: 변경된 total.json을 저장소에 반영
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # 띄어쓰기가 있는 폴더명이므로 따옴표로 감싸서 추가합니다.
+          git add "command list/total.json"
+          
+          git diff --quiet && git diff --staged --quiet || git commit -m "Auto-merge: update total.json in command list"
+          git push
