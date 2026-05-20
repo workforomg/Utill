@@ -6,8 +6,8 @@
 // @match        https://crack.wrtn.ai/setting/chat
 // @grant        GM_xmlhttpRequest
 // @connect      api.github.com
-// @updateURL    https://raw.githubusercontent.com/workforomg/Utill/main/shortcut-preset.user.js
-// @downloadURL  https://raw.githubusercontent.com/workforomg/Utill/main/shortcut-preset.user.js
+// @updateURL    https://github.com/workforomg/Utill/raw/refs/heads/main/Command%20online%20preset.user.js
+// @downloadURL  https://github.com/workforomg/Utill/raw/refs/heads/main/Command%20online%20preset.user.js
 // @run-at       document-end
 // ==/UserScript==
 
