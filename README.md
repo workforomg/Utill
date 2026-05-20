@@ -1,5 +1,11 @@
 # 모든 애드온은 템퍼몽키(Tampermokey)확장프로그램이 필요합니다.
 
+## #단축어 온라인 프리셋 애드온
+단축어를 온라인에서 불러옵니다.
+
+<a href="https://github.com/workforomg/Utill/raw/refs/heads/main/Command%20online%20preset.user.js">온라인 단축어 프리셋</a>
+
+
 ## #구분자 색상 애드온
 구분자(",',())에 유저 커스텀 색상을 입힙니다.
 
