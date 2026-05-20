@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Command online preset
 // @namespace    https://github.com/workforomg/Utill
-// @version      1.1
-// @description  단축어 온라인 프리셋 (다중 태그 검색 지원)
+// @version      1.2
+// @description  단축어 온라인 프리셋
 // @match        https://crack.wrtn.ai/setting/chat
 // @grant        GM_xmlhttpRequest
 // @connect      api.github.com
@@ -193,7 +193,7 @@
                             </svg>
                         </button>
                     </div>
-                    <a href="https://forms.gle/LUpRgw1HX4i93BPM8" target="_blank" rel="noopener noreferrer" class="text-[10px] px-2 py-1 rounded border border-border text-muted-foreground hover:bg-accent/50 transition-colors cursor-pointer flex items-center justify-center">
+                    <a href="https://docs.google.com/forms/d/e/1FAIpQLSdfeYMQvDdBJycqVQjmzghXeFV-IsAdPJcidojMH22wWTM_xg/viewform?usp=header" target="_blank" rel="noopener noreferrer" class="text-[10px] px-2 py-1 rounded border border-border text-muted-foreground hover:bg-accent/50 transition-colors cursor-pointer flex items-center justify-center">
                         단축어 공유하기 ↗
                     </a>
                 </div>
