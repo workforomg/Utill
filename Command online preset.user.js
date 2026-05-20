@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Command online preset
 // @namespace    https://github.com/workforomg/Utill
-// @version      1.0
-// @description  단축어 온라인 프리셋
+// @version      1.1
+// @description  단축어 온라인 프리셋 (다중 태그 검색 지원)
 // @match        https://crack.wrtn.ai/setting/chat
 // @grant        GM_xmlhttpRequest
 // @connect      api.github.com
@@ -53,8 +53,16 @@
                 const authorQuery = query.substring(1).trim();
                 filtered = filtered.filter(item => item.author && item.author.toLowerCase().includes(authorQuery));
             } else if (query.startsWith('#')) {
-                const tagQuery = query.trim();
-                filtered = filtered.filter(item => item.tags && item.tags.some(t => t.toLowerCase().includes(tagQuery)));
+                // 💡 [핵심 변경] 쉼표로 쪼개서 다중 태그(AND) 검색 적용
+                const tagQueries = query.split(',').map(q => q.trim()).filter(q => q !== '');
+                
+                filtered = filtered.filter(item => {
+                    if (!item.tags || !Array.isArray(item.tags)) return false;
+                    // 검색된 모든 태그가 아이템의 태그 배열 안에 하나라도 포함되어 있어야 함
+                    return tagQueries.every(tQuery => 
+                        item.tags.some(t => t.toLowerCase().includes(tQuery))
+                    );
+                });
             } else {
                 filtered = filtered.filter(item => item.name && item.name.toLowerCase().includes(query));
             }
@@ -93,7 +101,7 @@
                 const isPromptFilled = promptTextarea && promptTextarea.value.trim() !== '';
                 if (isNameFilled || isDescFilled || isPromptFilled) {
                     const wantToOverwrite = confirm('이미 작성된 내용이 있습니다. 덮어씌우시겠습니까?\n(기존에 작성한 내용은 모두 사라집니다)');
-                    if (!wantToOverwrite) return;
+                    if (!wantToOverwrite) return; 
                 }
                 if (nameInput) setNativeValue(nameInput, item.name || '');
                 if (descInput) setNativeValue(descInput, item.description || '');
@@ -206,7 +214,6 @@
         const btnFemale = document.getElementById('btn-filter-female');
         const searchInput = document.getElementById('preset-search-input');
 
-        // 새로고침 이벤트 리스너 추가
         btnRefresh.addEventListener('click', () => {
             const container = document.getElementById('preset-list-container');
             if (container) {
