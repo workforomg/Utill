@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         Story 수집기 - 제스처 메뉴 연동
 // @namespace    https://github.com/workforomg/Utill
-// @version      2.6.0
+// @version      2.6.1
 // @description  fetch/xhr 없이 Virtuoso DOM의 data-index 항목을 순회하며 story ID를 수집하고, TMGestureMenu API에 유틸 메뉴로 등록
 // @match        https://crack.wrtn.ai/*
 // @run-at       document-idle
+// @require      https://raw.githubusercontent.com/workforomg/Utill/refs/heads/main/%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/crack_selector_vars.js
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        unsafeWindow
@@ -14,13 +15,59 @@
   'use strict';
 
   /******************************************************************
-   * 네가 준 리스트 내부 셀렉터.
-   * 단, 이 셀렉터 하나만 믿지 않고 실제 scroller 내부도 같이 훑음.
+   * 공용 지정자 변수
+   * - crack_selector_vars.js의 unsafeWindow.CrackSelectorVars 값을 우선 사용.
+   * - 값이 없거나 아직 로드되지 않은 경우 기존 fallback 셀렉터를 사용.
    ******************************************************************/
-  const STORY_LIST_ROOT_SELECTOR = String.raw`#__next > div > div.relative.flex.h-full > div.hidden.h-full.shrink-0.overflow-hidden.bg-surface_tertiary.md\:block.transition-\[width\].duration-300.ease-\[cubic-bezier\(0\.25\,0\.1\,0\.25\,1\)\].w-\[260px\] > div > div > div.flex.flex-col.w-full.h-full.min-h-full.overflow-hidden.sticky.top-0 > div.relative.flex-1.min-h-0.flex.flex-col > div > div > div > div > div:nth-child(2) > div:nth-child(1)`;
+  const EXTERNAL_ROOT =
+    typeof unsafeWindow !== 'undefined'
+      ? unsafeWindow
+      : window;
 
-  const SCROLLER_SELECTOR =
+  const FALLBACK_STORY_LIST_ROOT_SELECTOR = String.raw`#__next > div > div.relative.flex.h-full > div.hidden.h-full.shrink-0.overflow-hidden.bg-surface_tertiary.md\:block.transition-\[width\].duration-300.ease-\[cubic-bezier\(0\.25\,0\.1\,0\.25\,1\)\].w-\[260px\] > div > div > div.flex.flex-col.w-full.h-full.min-h-full.overflow-hidden.sticky.top-0 > div.relative.flex-1.min-h-0.flex.flex-col > div > div > div > div > div:nth-child(2) > div:nth-child(1)`;
+
+  const FALLBACK_SCROLLER_SELECTOR =
     '[data-testid="virtuoso-scroller"][data-virtuoso-scroller="true"], [data-virtuoso-scroller="true"], [data-testid="virtuoso-scroller"]';
+
+  function getCrackSelectorVars() {
+    return (
+      (EXTERNAL_ROOT && EXTERNAL_ROOT.CrackSelectorVars) ||
+      (typeof window !== 'undefined' ? window.CrackSelectorVars : null) ||
+      null
+    );
+  }
+
+  function getSelectorVar(path, fallback) {
+    const vars = getCrackSelectorVars();
+
+    let current = vars;
+
+    for (const key of path) {
+      if (!current || typeof current !== 'object' || !(key in current)) {
+        return fallback;
+      }
+
+      current = current[key];
+    }
+
+    return typeof current === 'string' && current.trim()
+      ? current
+      : fallback;
+  }
+
+  function getStoryListRootSelector() {
+    return getSelectorVar(
+      ['storyList', 'rootSelector'],
+      FALLBACK_STORY_LIST_ROOT_SELECTOR
+    );
+  }
+
+  function getScrollerSelector() {
+    return getSelectorVar(
+      ['playedStoryList', 'virtualScrollerSelector'],
+      FALLBACK_SCROLLER_SELECTOR
+    );
+  }
 
   /******************************************************************
    * 설정
@@ -354,7 +401,7 @@
    ******************************************************************/
   function getExactListRoots() {
     try {
-      return [...document.querySelectorAll(STORY_LIST_ROOT_SELECTOR)];
+      return [...document.querySelectorAll(getStoryListRootSelector())];
     } catch (_) {
       return [];
     }
@@ -610,7 +657,7 @@
   }
 
   function findBestScroller() {
-    const candidates = [...document.querySelectorAll(SCROLLER_SELECTOR)]
+    const candidates = [...document.querySelectorAll(getScrollerSelector())]
       .filter(isVisible)
       .sort((a, b) => scoreScroller(b) - scoreScroller(a));
 
@@ -922,11 +969,6 @@
   const ACTION_TOGGLE = 'crack-collector-toggle';
   const ACTION_CLEAR = 'crack-collector-clear';
   const ACTION_SETTINGS = 'crack-collector-settings';
-
-  const EXTERNAL_ROOT =
-    typeof unsafeWindow !== 'undefined'
-      ? unsafeWindow
-      : window;
 
   let statusText = '대기 중';
   let menuRegistered = false;
