@@ -1,5 +1,6 @@
 // ==UserScript==
 // @name         댓글 필터
+// @author       지유다요
 // @namespace    https://github.com/workforomg/Utill
 // @version      0.3.0
 // @description  댓글을 감지하여 작성자별 표시/가리기/숨기기, 필터링 목록, 사용자 메모를 제공합니다.
