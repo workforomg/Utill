@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         채팅 휴지통
 // @namespace    https://github.com/workforomg/Utill
-// @version      1.0.0
+// @version      1.5.0
 // @author       지유지요
-// @description  채팅 휴지통 / XHR·fetch 세션목록 필터 / 전체 사이드바 오버레이 / 원본 API 인증 헤더 재사용 / 선택 일괄 복구·삭제 / JSON 백업
+// @description  채팅 휴지통 / PC 사이드바 absolute + 모바일 body fixed 전체화면 / XHR·fetch 세션목록 필터 / 원본 API 인증 헤더 재사용 / 선택 일괄 복구·삭제 / JSON 백업
 // @match        https://crack.wrtn.ai/*
 // @run-at       document-start
 // @grant        none
@@ -23,7 +23,7 @@
     const LOG_KEY = "crack-trash-import-log-v1";
 
     const ID = {
-        STYLE: "crack-trash-style-v190",
+        STYLE: "crack-trash-style-v210",
         OVERLAY: "crack-trash-overlay",
         HEADER: "crack-trash-header",
         CONTENT: "crack-trash-content",
@@ -35,6 +35,7 @@
 
     const state = {
         currentChatContext: null,
+        chatContextByTriggerId: new Map(),
         trashView: null,
         customMenu: null,
 
@@ -1159,8 +1160,10 @@
             "crack-trash-hide-style",
             "crack-trash-loaded-mask-v160",
             "crack-trash-style-v160",
+            "crack-trash-style-v200",
             "crack-trash-style-v170",
             "crack-trash-style-v180",
+            "crack-trash-style-v190",
         ];
 
         for (const id of oldStyleIds) {
@@ -1216,6 +1219,28 @@
 
                 overflow: hidden;
                 isolation: isolate;
+                box-sizing: border-box;
+                pointer-events: auto;
+            }
+
+            #${ID.OVERLAY}[data-layout="mobile-fixed"] {
+                position: fixed !important;
+                inset: 0 !important;
+                z-index: 2147483000 !important;
+
+                width: 100vw !important;
+                height: 100vh !important;
+                height: 100dvh !important;
+                max-width: none !important;
+                max-height: none !important;
+
+                margin: 0 !important;
+                transform: none !important;
+
+                overflow: hidden !important;
+                overscroll-behavior: contain;
+                touch-action: manipulation;
+                pointer-events: auto !important;
             }
 
             #${ID.HEADER} {
@@ -1235,6 +1260,8 @@
 
                 border-bottom: 1px solid var(--border);
                 background: inherit;
+                pointer-events: auto;
+                z-index: 2;
             }
 
             .crack-trash-header-button {
@@ -1257,6 +1284,11 @@
                 font-weight: 500;
 
                 cursor: pointer;
+                pointer-events: auto;
+                touch-action: manipulation;
+                -webkit-tap-highlight-color: transparent;
+                position: relative;
+                z-index: 3;
             }
 
             .crack-trash-header-button:hover {
@@ -1305,6 +1337,7 @@
 
             #${ID.CONTENT} {
                 display: flex;
+                pointer-events: auto;
                 flex-direction: column;
 
                 flex: 1 1 auto;
@@ -1318,6 +1351,8 @@
 
             #${ID.SCROLL} {
                 flex: 1 1 auto;
+                pointer-events: auto;
+                touch-action: pan-y;
 
                 width: 100%;
                 min-height: 0;
@@ -1397,7 +1432,7 @@
                 bottom: 28px;
                 transform: translateX(-50%);
 
-                z-index: 999999;
+                z-index: 2147483647;
 
                 max-width: 440px;
                 padding: 10px 14px;
@@ -1703,7 +1738,7 @@
 
         if (!button) return null;
 
-        const anchor = button.closest('a[href*="/episodes/"]');
+        const anchor = button.closest('a[href*="/stories/"][href*="/episodes/"]');
         if (!anchor) return null;
 
         const parsed = parseChatHref(anchor.getAttribute("href"));
@@ -1740,6 +1775,168 @@
         };
     }
 
+    // =========================================================
+    // PC / 모바일 실제 채팅목록 DOM 바인딩
+    //
+    // 모바일 DOM도 개별 세션은
+    // a[href="/stories/.../episodes/..."] 내부에
+    // button[aria-label="채팅방 메뉴"][aria-haspopup="menu"]가 존재한다.
+    // 이 버튼을 직접 바인딩해 portal 메뉴가 뜨기 전에 chatId를 고정한다.
+    // =========================================================
+
+    function rememberChatContextFromButton(button) {
+        if (!(button instanceof Element)) {
+            return null;
+        }
+
+        const context = extractChatContextFromTrigger(button);
+        if (!context) {
+            return null;
+        }
+
+        state.currentChatContext = context;
+
+        if (button.id) {
+            state.chatContextByTriggerId.set(button.id, context);
+        }
+
+        return context;
+    }
+
+    function scheduleMenuRescan() {
+        /*
+         * 모바일 WebView/Radix portal은 메뉴 노드 생성 시점이
+         * touch/click보다 한두 프레임 늦을 수 있다.
+         */
+        for (const delay of [0, 24, 60, 120, 220]) {
+            setTimeout(() => {
+                scanMenus(document);
+            }, delay);
+        }
+    }
+
+    function bindChatMenuButton(button) {
+        if (!(button instanceof HTMLElement)) {
+            return;
+        }
+
+        if (button.dataset.crackTrashBoundChatMenu === "true") {
+            return;
+        }
+
+        const anchor = button.closest(
+            'a[href*="/stories/"][href*="/episodes/"]'
+        );
+
+        if (!anchor) {
+            return;
+        }
+
+        button.dataset.crackTrashBoundChatMenu = "true";
+
+        const capture = () => {
+            rememberChatContextFromButton(button);
+            scheduleMenuRescan();
+        };
+
+        button.addEventListener("pointerdown", capture, true);
+        button.addEventListener("touchstart", capture, {
+            capture: true,
+            passive: true,
+        });
+        button.addEventListener("click", capture, true);
+        button.addEventListener("focusin", capture, true);
+    }
+
+    function findChatListMenuTrigger(root = document) {
+        const buttons = [];
+
+        if (
+            root instanceof Element &&
+            root.matches('button[aria-haspopup="menu"]')
+        ) {
+            buttons.push(root);
+        }
+
+        if (root?.querySelectorAll) {
+            buttons.push(
+                ...root.querySelectorAll('button[aria-haspopup="menu"]')
+            );
+        }
+
+        for (const button of buttons) {
+            if (button.getAttribute("aria-label") === "채팅방 메뉴") {
+                continue;
+            }
+
+            const row = button.parentElement;
+            if (!row) {
+                continue;
+            }
+
+            const hasChatListLabel = [...row.querySelectorAll("span")]
+                .some(span => textOf(span) === "채팅 목록");
+
+            if (hasChatListLabel) {
+                return button;
+            }
+        }
+
+        return null;
+    }
+
+    function bindChatListMenuTrigger(button) {
+        if (!(button instanceof HTMLElement)) {
+            return;
+        }
+
+        if (button.dataset.crackTrashBoundListMenu === "true") {
+            return;
+        }
+
+        button.dataset.crackTrashBoundListMenu = "true";
+
+        const rescan = () => {
+            scheduleMenuRescan();
+        };
+
+        button.addEventListener("pointerdown", rescan, true);
+        button.addEventListener("touchstart", rescan, {
+            capture: true,
+            passive: true,
+        });
+        button.addEventListener("click", rescan, true);
+    }
+
+    function scanSidebarStructure(root = document) {
+        const buttons = [];
+
+        if (
+            root instanceof Element &&
+            root.matches('button[aria-label="채팅방 메뉴"][aria-haspopup="menu"]')
+        ) {
+            buttons.push(root);
+        }
+
+        if (root?.querySelectorAll) {
+            buttons.push(
+                ...root.querySelectorAll(
+                    'a[href*="/stories/"][href*="/episodes/"] ' +
+                    'button[aria-label="채팅방 메뉴"][aria-haspopup="menu"]'
+                )
+            );
+        }
+
+        for (const button of new Set(buttons)) {
+            bindChatMenuButton(button);
+        }
+
+        const listTrigger = findChatListMenuTrigger(root);
+        if (listTrigger) {
+            bindChatListMenuTrigger(listTrigger);
+        }
+    }
+
     function rememberChatMenuContext(event) {
         const target = event.target;
 
@@ -1748,20 +1945,34 @@
         }
 
         const button = target.closest(
-            'button[aria-label="채팅방 메뉴"]'
+            'button[aria-label="채팅방 메뉴"][aria-haspopup="menu"]'
         );
 
-        if (!button) return;
-
-        const context = extractChatContextFromTrigger(button);
-
-        if (context) {
-            state.currentChatContext = context;
+        if (!button) {
+            return;
         }
+
+        rememberChatContextFromButton(button);
+        scheduleMenuRescan();
     }
 
     document.addEventListener(
         "pointerdown",
+        rememberChatMenuContext,
+        true
+    );
+
+    document.addEventListener(
+        "touchstart",
+        rememberChatMenuContext,
+        {
+            capture: true,
+            passive: true,
+        }
+    );
+
+    document.addEventListener(
+        "click",
         rememberChatMenuContext,
         true
     );
@@ -1772,23 +1983,69 @@
         true
     );
 
-    function resolveChatContextFromMenu(menu) {
-        const labelledBy = menu.getAttribute("aria-labelledby");
+    function getLabelledByIds(element) {
+        const ids = new Set();
 
-        if (labelledBy) {
-            for (const id of labelledBy.split(/\s+/).filter(Boolean)) {
-                const trigger = document.getElementById(id);
-                if (!trigger) continue;
+        let node = element;
+        let depth = 0;
 
-                const context = extractChatContextFromTrigger(trigger);
+        while (
+            node instanceof Element &&
+            node !== document.body &&
+            depth < 6
+        ) {
+            const labelledBy = node.getAttribute(
+                "aria-labelledby"
+            );
 
-                if (context) {
-                    state.currentChatContext = context;
-                    return context;
+            if (labelledBy) {
+                for (
+                    const id
+                    of labelledBy
+                        .split(/\s+/)
+                        .filter(Boolean)
+                ) {
+                    ids.add(id);
                 }
+            }
+
+            node = node.parentElement;
+            depth += 1;
+        }
+
+        return [...ids];
+    }
+
+    function resolveChatContextFromMenu(menu) {
+        for (const id of getLabelledByIds(menu)) {
+            const cached =
+                state.chatContextByTriggerId.get(id);
+
+            if (cached) {
+                state.currentChatContext = cached;
+                return cached;
+            }
+
+            const trigger = document.getElementById(id);
+            if (!trigger) continue;
+
+            const context =
+                extractChatContextFromTrigger(trigger);
+
+            if (context) {
+                state.currentChatContext = context;
+                state.chatContextByTriggerId.set(
+                    id,
+                    context
+                );
+                return context;
             }
         }
 
+        /*
+         * 모바일 액션시트는 aria-labelledby가 없는 경우가 있어
+         * 메뉴를 연 직전 touchstart/pointerdown에서 저장한 컨텍스트를 사용.
+         */
         return state.currentChatContext;
     }
 
@@ -2089,56 +2346,85 @@
             return null;
         }
 
+        const scrollerSelector =
+            '[data-testid="virtuoso-scroller"][data-virtuoso-scroller="true"], ' +
+            '[data-testid="virtuoso-scroller"]';
+
         const candidates = [];
         let node = tabList;
 
         while (node && node !== document.body) {
             if (node instanceof HTMLElement) {
-                const rect = node.getBoundingClientRect();
-                const style = getComputedStyle(node);
+                const hasScroller = !!node.querySelector(scrollerSelector);
 
-                const hasScroller =
-                    !!node.querySelector('[data-testid="virtuoso-scroller"]');
+                if (hasScroller) {
+                    const rect = node.getBoundingClientRect();
+                    const classList = node.classList;
 
-                const isSidebarSized =
-                    rect.width >= 220 &&
-                    rect.width <= 340 &&
-                    rect.height >= Math.max(320, window.innerHeight * 0.55);
+                    /*
+                     * PC: 기존 bg-sidebar 패널.
+                     */
+                    const desktopExact =
+                        classList.contains("bg-sidebar");
 
-                const hasSidebarClass =
-                    node.classList.contains("bg-sidebar");
+                    /*
+                     * 모바일: 사용자가 제공한 실제 DOM의 최상위 패널
+                     * flex flex-col w-full h-full min-h-full overflow-hidden sticky top-0
+                     */
+                    const mobileExact =
+                        classList.contains("flex") &&
+                        classList.contains("flex-col") &&
+                        classList.contains("w-full") &&
+                        (
+                            classList.contains("h-full") ||
+                            classList.contains("min-h-full")
+                        ) &&
+                        classList.contains("overflow-hidden") &&
+                        classList.contains("sticky") &&
+                        classList.contains("top-0");
 
-                if (
-                    isSidebarSized &&
-                    (hasScroller || hasSidebarClass)
-                ) {
-                    candidates.push({
-                        node,
-                        hasSidebarClass,
-                        area: rect.width * rect.height,
-                        position: style.position,
-                    });
+                    if (desktopExact) {
+                        return node;
+                    }
+
+                    if (mobileExact) {
+                        return node;
+                    }
+
+                    const viewportWidth = Math.max(
+                        document.documentElement.clientWidth || 0,
+                        window.innerWidth || 0
+                    );
+
+                    const maxSidebarWidth = Math.max(
+                        340,
+                        Math.min(520, viewportWidth + 8)
+                    );
+
+                    const sidebarSized =
+                        rect.width >= 220 &&
+                        rect.width <= maxSidebarWidth &&
+                        rect.height >= Math.max(320, window.innerHeight * 0.55);
+
+                    if (sidebarSized) {
+                        candidates.push({
+                            node,
+                            area: rect.width * rect.height,
+                        });
+                    }
                 }
             }
 
             node = node.parentElement;
         }
 
-        // 실제 Crack DOM의 `bg-sidebar` 전체 패널을 최우선으로 사용한다.
-        const sidebarClassCandidate =
-            candidates
-                .filter(item => item.hasSidebarClass)
-                .sort((a, b) => b.area - a.area)[0];
+        /*
+         * exact class를 찾지 못한 경우 가장 넓은 후보를 사용.
+         * 모바일 전체폭(예: 390px)도 허용한다.
+         */
+        candidates.sort((a, b) => b.area - a.area);
 
-        if (sidebarClassCandidate) {
-            return sidebarClassCandidate.node;
-        }
-
-        // 클래스명이 바뀌어도 전체 높이의 가장 큰 사이드바 후보를 사용한다.
-        const fallback =
-            candidates.sort((a, b) => b.area - a.area)[0];
-
-        return fallback?.node || null;
+        return candidates[0]?.node || null;
     }
 
     function getOpaqueBackgroundColor(element) {
@@ -2257,12 +2543,32 @@
         return content;
     }
 
-    function createTrashOverlay(sidebarRoot) {
+    function isMobileTrashLayout() {
+        const viewportWidth = Math.max(
+            0,
+            document.documentElement?.clientWidth || 0,
+            window.innerWidth || 0
+        );
+
+        return (
+            viewportWidth <= 768 ||
+            window.matchMedia?.("(max-width: 768px)")?.matches === true
+        );
+    }
+
+    function createTrashOverlay(backgroundSource, layoutMode) {
         const overlay = document.createElement("div");
         overlay.id = ID.OVERLAY;
         overlay.dataset.crackTrashOwned = "true";
+        overlay.dataset.layout = layoutMode;
+
+        const backgroundElement =
+            backgroundSource instanceof HTMLElement
+                ? backgroundSource
+                : document.body;
+
         overlay.style.backgroundColor =
-            getOpaqueBackgroundColor(sidebarRoot);
+            getOpaqueBackgroundColor(backgroundElement);
 
         overlay.append(
             createTrashHeader(),
@@ -2272,38 +2578,63 @@
         return overlay;
     }
 
-    async function enterTrashMode() {
-        if (
-            state.trashView &&
-            document.getElementById(ID.OVERLAY)
-        ) {
-            await refreshTrashFromServer();
-            return;
+    function mountTrashOverlay(tabList) {
+        const mobile = isMobileTrashLayout();
+
+        /*
+         * 모바일: 부모 sticky/overflow/transform/드로어 stacking context의
+         * 영향을 받지 않도록 body 바로 아래 fixed 전체화면으로 띄운다.
+         * 사이드바 루트 탐색에 실패해도 모바일 휴지통은 열 수 있다.
+         */
+        if (mobile) {
+            const backgroundSource =
+                findSidebarOverlayRoot(tabList) ||
+                tabList.closest(
+                    ".flex.flex-col.w-full.h-full, " +
+                    ".flex.flex-col.w-full.min-h-full"
+                ) ||
+                tabList.parentElement ||
+                document.body;
+
+            const overlay = createTrashOverlay(
+                backgroundSource,
+                "mobile-fixed"
+            );
+
+            const body = document.body;
+            const oldBodyOverflow =
+                body.style.getPropertyValue("overflow");
+            const oldBodyOverflowPriority =
+                body.style.getPropertyPriority("overflow");
+
+            body.style.setProperty("overflow", "hidden", "important");
+            body.appendChild(overlay);
+
+            return {
+                mode: "mobile-fixed",
+                root: body,
+                overlay,
+                oldBodyOverflow,
+                oldBodyOverflowPriority,
+            };
         }
 
-        const tabList = findEpisodeTabList();
-
-        if (!tabList) {
-            showToast("에피소드/파티챗 영역을 찾지 못했습니다.");
-            return;
-        }
-
+        /*
+         * PC: 기존처럼 왼쪽 사이드바 내부를 absolute overlay로 덮는다.
+         * Virtuoso 자체는 display:none/height:0으로 만들지 않는다.
+         */
         const sidebarRoot = findSidebarOverlayRoot(tabList);
 
         if (!sidebarRoot) {
-            showToast("왼쪽 사이드바 전체 영역을 찾지 못했습니다.");
-            return;
+            return null;
         }
 
         const oldPosition =
             sidebarRoot.style.getPropertyValue("position");
-
         const oldPositionPriority =
             sidebarRoot.style.getPropertyPriority("position");
-
         const oldOverflow =
             sidebarRoot.style.getPropertyValue("overflow");
-
         const oldOverflowPriority =
             sidebarRoot.style.getPropertyPriority("overflow");
 
@@ -2311,39 +2642,52 @@
             sidebarRoot.style.setProperty("position", "relative");
         }
 
-        // 오버레이가 패널 밖으로 새지 않도록 하되,
-        // 내부 React/Virtuoso 노드는 건드리지 않는다.
         sidebarRoot.style.setProperty("overflow", "hidden");
 
-        state.trashView = {
+        const overlay = createTrashOverlay(
+            sidebarRoot,
+            "desktop-absolute"
+        );
+
+        sidebarRoot.appendChild(overlay);
+
+        return {
+            mode: "desktop-absolute",
             root: sidebarRoot,
+            overlay,
             oldPosition,
             oldPositionPriority,
             oldOverflow,
             oldOverflowPriority,
         };
-
-        sidebarRoot.appendChild(
-            createTrashOverlay(sidebarRoot)
-        );
-
-        renderTrashList();
-        updateTrashHeader();
-
-        await refreshTrashFromServer();
     }
 
-    function exitTrashMode() {
-        closeCustomMenu();
+    function unmountTrashOverlay(view) {
+        view?.overlay?.remove();
 
-        state.selectionMode = null;
-        state.selectedIds.clear();
+        if (!view) {
+            return;
+        }
 
-        document.getElementById(ID.OVERLAY)?.remove();
+        if (view.mode === "mobile-fixed") {
+            const body = document.body;
 
-        const view = state.trashView;
+            if (body) {
+                body.style.removeProperty("overflow");
 
-        if (view?.root?.isConnected) {
+                if (view.oldBodyOverflow) {
+                    body.style.setProperty(
+                        "overflow",
+                        view.oldBodyOverflow,
+                        view.oldBodyOverflowPriority
+                    );
+                }
+            }
+
+            return;
+        }
+
+        if (view.mode === "desktop-absolute" && view.root?.isConnected) {
             view.root.style.removeProperty("position");
             view.root.style.removeProperty("overflow");
 
@@ -2363,6 +2707,54 @@
                 );
             }
         }
+    }
+
+    async function enterTrashMode() {
+        if (
+            state.trashView &&
+            document.getElementById(ID.OVERLAY)
+        ) {
+            await refreshTrashFromServer();
+            return;
+        }
+
+        const tabList = findEpisodeTabList();
+
+        if (!tabList) {
+            showToast("에피소드/파티챗 영역을 찾지 못했습니다.");
+            return;
+        }
+
+        const view = mountTrashOverlay(tabList);
+
+        if (!view) {
+            showToast("왼쪽 사이드바 전체 영역을 찾지 못했습니다.");
+            return;
+        }
+
+        state.trashView = view;
+
+        renderTrashList();
+        updateTrashHeader();
+
+        /*
+         * 화면은 서버 전체조회보다 먼저 띄운다.
+         * 따라서 인증/네트워크 확인이 실패해도 휴지통 UI 자체는 열린다.
+         */
+        await refreshTrashFromServer();
+    }
+
+    function exitTrashMode() {
+        closeCustomMenu();
+
+        state.selectionMode = null;
+        state.selectedIds.clear();
+
+        const view = state.trashView;
+        unmountTrashOverlay(view);
+
+        /* 혹시 state가 유실된 경우의 안전 정리 */
+        document.getElementById(ID.OVERLAY)?.remove();
 
         state.trashView = null;
 
@@ -2476,6 +2868,9 @@
                 "[&_svg]:size-4 " +
                 "text-icon_tertiary rounded " +
                 "data-[state=open]:bg-hover";
+
+            menuButton.style.pointerEvents = "auto";
+            menuButton.style.touchAction = "manipulation";
 
             menuButton.innerHTML = `
                 <svg
@@ -2766,7 +3161,18 @@
         wrapper.style.left = "0px";
         wrapper.style.top = "0px";
         wrapper.style.minWidth = "max-content";
-        wrapper.style.zIndex = "1000";
+
+        // 모바일 fixed 휴지통은 body 최상단 레이어이므로
+        // 커스텀 메뉴도 반드시 그 위에 있어야 한다.
+        const trashOverlay = document.getElementById(ID.OVERLAY);
+        const isMobileFixedTrash =
+            trashOverlay?.dataset?.layout === "mobile-fixed";
+
+        wrapper.style.zIndex = isMobileFixedTrash
+            ? "2147483600"
+            : "1000";
+        wrapper.style.pointerEvents = "auto";
+        wrapper.style.touchAction = "manipulation";
 
         wrapper.style.setProperty(
             "--radix-popper-anchor-width",
@@ -3213,27 +3619,67 @@
     // 원본 Radix 메뉴 패치
     // =========================================================
 
+    const MENU_ACTION_SELECTOR =
+        '[role="menuitem"], [data-radix-collection-item], button';
+
     function getMenuItems(menu) {
-        return [
+        if (!(menu instanceof Element)) {
+            return [];
+        }
+
+        const direct = [
             ...menu.querySelectorAll(
-                ':scope > [role="menuitem"]'
+                ':scope > [role="menuitem"], ' +
+                ':scope > [data-radix-collection-item]'
+            ),
+        ];
+
+        if (direct.length) {
+            return [...new Set(direct)];
+        }
+
+        /*
+         * 모바일에서는 동일 액션이 role=menu가 아닌
+         * action-sheet/dialog 내부 button으로 렌더될 수 있다.
+         */
+        return [
+            ...new Set(
+                [...menu.querySelectorAll(MENU_ACTION_SELECTOR)]
+                    .filter(element => {
+                        const text = textOf(element);
+
+                        return [
+                            "자동 정리",
+                            "편집",
+                            "휴지통",
+                            "고정하기",
+                            "고정 해제하기",
+                            "이름 변경하기",
+                            "보관함으로 이동",
+                            "삭제하기",
+                            "휴지통으로 이동",
+                        ].includes(text);
+                    })
             ),
         ];
     }
 
+    function hasMenuItemText(container, text) {
+        return getMenuItems(container)
+            .some(item => textOf(item) === text);
+    }
+
     function isGlobalChatMenu(menu) {
-        if (
-            !(menu instanceof HTMLElement) ||
-            menu.getAttribute("role") !== "menu"
-        ) {
+        if (!(menu instanceof HTMLElement)) {
             return false;
         }
 
-        const texts = getMenuItems(menu).map(textOf);
-
         return (
-            texts.includes("자동 정리") &&
-            (texts.includes("편집") || texts.includes("휴지통"))
+            hasMenuItemText(menu, "자동 정리") &&
+            (
+                hasMenuItemText(menu, "편집") ||
+                hasMenuItemText(menu, "휴지통")
+            )
         );
     }
 
@@ -3244,11 +3690,17 @@
 
         const items = getMenuItems(menu);
 
-        const edit = items.find(item => textOf(item) === "편집");
-        const auto = items.find(item => textOf(item) === "자동 정리");
+        const edit = items.find(
+            item => textOf(item) === "편집"
+        );
+
+        const auto = items.find(
+            item => textOf(item) === "자동 정리"
+        );
 
         if (edit && !state.editItemTemplate) {
-            state.editItemTemplate = edit.cloneNode(true);
+            state.editItemTemplate =
+                edit.cloneNode(true);
         }
 
         const source = edit || auto;
@@ -3274,7 +3726,11 @@
             "true"
         );
 
-        replaceItemContent(trash, "휴지통", iconTrash());
+        replaceItemContent(
+            trash,
+            "휴지통",
+            iconTrash()
+        );
 
         trash.addEventListener(
             "click",
@@ -3301,20 +3757,17 @@
     }
 
     function isIndividualChatMenu(menu) {
-        if (
-            !(menu instanceof HTMLElement) ||
-            menu.getAttribute("role") !== "menu"
-        ) {
+        if (!(menu instanceof HTMLElement)) {
             return false;
         }
 
-        const texts = getMenuItems(menu).map(textOf);
-
         return (
-            texts.includes("이름 변경하기") &&
-            texts.includes("보관함으로 이동") &&
-            (texts.includes("삭제하기") ||
-                texts.includes("휴지통으로 이동"))
+            hasMenuItemText(menu, "이름 변경하기") &&
+            hasMenuItemText(menu, "보관함으로 이동") &&
+            (
+                hasMenuItemText(menu, "삭제하기") ||
+                hasMenuItemText(menu, "휴지통으로 이동")
+            )
         );
     }
 
@@ -3331,17 +3784,27 @@
             return;
         }
 
-        const originalDelete = getMenuItems(menu).find(
-            item => textOf(item) === "삭제하기"
-        );
+        const originalDelete =
+            getMenuItems(menu).find(
+                item => textOf(item) === "삭제하기"
+            );
 
         if (!originalDelete) {
             return;
         }
 
         if (!state.deleteItemTemplate) {
-            state.deleteItemTemplate = originalDelete.cloneNode(true);
+            state.deleteItemTemplate =
+                originalDelete.cloneNode(true);
         }
+
+        /*
+         * 모바일에서는 메뉴가 portal에 붙은 뒤 trigger와 연결 정보가
+         * 사라질 수 있으므로 패치되는 순간 컨텍스트도 고정해 둔다.
+         */
+        const boundContext =
+            resolveChatContextFromMenu(menu) ||
+            state.currentChatContext;
 
         const trash = originalDelete.cloneNode(true);
 
@@ -3350,31 +3813,107 @@
             "true"
         );
 
-        replaceItemContent(trash, "휴지통으로 이동");
+        replaceItemContent(
+            trash,
+            "휴지통으로 이동"
+        );
+
+        let activated = false;
+        let lastTouchAt = 0;
 
         const activate = async event => {
-            event.preventDefault();
-            event.stopPropagation();
-            event.stopImmediatePropagation();
+            if (activated) {
+                event?.preventDefault?.();
+                event?.stopPropagation?.();
+                return;
+            }
 
-            const context = resolveChatContextFromMenu(menu);
+            activated = true;
+
+            event?.preventDefault?.();
+            event?.stopPropagation?.();
+            event?.stopImmediatePropagation?.();
+
+            const context =
+                boundContext ||
+                resolveChatContextFromMenu(menu) ||
+                state.currentChatContext;
 
             if (!context) {
-                showToast("채팅 정보를 찾지 못했습니다.");
+                showToast(
+                    "채팅 정보를 찾지 못했습니다."
+                );
+
                 closeRadixMenu(menu);
+                activated = false;
                 return;
             }
 
             closeRadixMenu(menu);
-            await moveChatToTrash(context);
+
+            try {
+                await moveChatToTrash(context);
+            } finally {
+                setTimeout(() => {
+                    activated = false;
+                }, 400);
+            }
         };
 
-        trash.addEventListener("click", activate, true);
+        /*
+         * 일반 브라우저/PC.
+         */
+        trash.addEventListener(
+            "click",
+            event => {
+                /* touchend 뒤 생성되는 synthetic click 중복 방지 */
+                if (
+                    Date.now() - lastTouchAt < 700
+                ) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation();
+                    return;
+                }
+
+                activate(event).catch(error => {
+                    console.error(
+                        "[Crack Trash] 휴지통 이동 실패",
+                        error
+                    );
+                });
+            },
+            true
+        );
+
+        /*
+         * iOS/모바일 WebView fallback.
+         */
+        trash.addEventListener(
+            "touchend",
+            event => {
+                lastTouchAt = Date.now();
+
+                activate(event).catch(error => {
+                    console.error(
+                        "[Crack Trash] 모바일 휴지통 이동 실패",
+                        error
+                    );
+                });
+            },
+            {
+                capture: true,
+                passive: false,
+            }
+        );
 
         trash.addEventListener(
             "keydown",
             event => {
-                if (event.key === "Enter" || event.key === " ") {
+                if (
+                    event.key === "Enter" ||
+                    event.key === " "
+                ) {
                     activate(event).catch(error => {
                         console.error(
                             "[Crack Trash] 휴지통 이동 실패",
@@ -3391,39 +3930,130 @@
 
     function closeRadixMenu(menu) {
         try {
-            menu.dispatchEvent(
-                new KeyboardEvent("keydown", {
-                    key: "Escape",
-                    code: "Escape",
-                    bubbles: true,
-                    cancelable: true,
-                })
+            const escapeEvent =
+                new KeyboardEvent(
+                    "keydown",
+                    {
+                        key: "Escape",
+                        code: "Escape",
+                        bubbles: true,
+                        cancelable: true,
+                    }
+                );
+
+            menu?.dispatchEvent(escapeEvent);
+
+            /* 모바일 action-sheet/dialog fallback */
+            document.dispatchEvent(
+                new KeyboardEvent(
+                    "keydown",
+                    {
+                        key: "Escape",
+                        code: "Escape",
+                        bubbles: true,
+                        cancelable: true,
+                    }
+                )
             );
         } catch {
             // ignore
         }
     }
 
-    function scanMenus(root = document) {
+    function findActionContainer(start, predicate) {
+        let node = start;
+        let depth = 0;
+
+        while (
+            node instanceof HTMLElement &&
+            node !== document.body &&
+            depth < 10
+        ) {
+            if (predicate(node)) {
+                return node;
+            }
+
+            node = node.parentElement;
+            depth += 1;
+        }
+
+        return null;
+    }
+
+    function collectMenuCandidates(root = document) {
         const menus = new Set();
 
-        if (
-            root instanceof Element &&
-            root.matches('[role="menu"]')
-        ) {
-            menus.add(root);
+        const addObvious = element => {
+            if (!(element instanceof HTMLElement)) {
+                return;
+            }
+
+            if (
+                element.matches(
+                    '[role="menu"], ' +
+                    '[data-radix-menu-content], ' +
+                    '[role="dialog"]'
+                )
+            ) {
+                menus.add(element);
+            }
+        };
+
+        if (root instanceof HTMLElement) {
+            addObvious(root);
         }
 
         if (root?.querySelectorAll) {
             for (
-                const menu
-                of root.querySelectorAll('[role="menu"]')
+                const element
+                of root.querySelectorAll(
+                    '[role="menu"], ' +
+                    '[data-radix-menu-content], ' +
+                    '[role="dialog"]'
+                )
             ) {
-                menus.add(menu);
+                menus.add(element);
+            }
+
+            /*
+             * 모바일 액션시트가 role=menu/dialog를 안 쓰는 경우:
+             * 삭제/편집 액션 자체에서 가장 가까운 액션 묶음을 역탐색한다.
+             */
+            const actionElements = [
+                ...root.querySelectorAll(
+                    MENU_ACTION_SELECTOR
+                ),
+            ].filter(element =>
+                [
+                    "삭제하기",
+                    "편집",
+                    "자동 정리",
+                ].includes(textOf(element))
+            );
+
+            for (const action of actionElements) {
+                const container =
+                    findActionContainer(
+                        action.parentElement,
+                        candidate =>
+                            isIndividualChatMenu(candidate) ||
+                            isGlobalChatMenu(candidate)
+                    );
+
+                if (container) {
+                    menus.add(container);
+                }
             }
         }
 
-        for (const menu of menus) {
+        return menus;
+    }
+
+    function scanMenus(root = document) {
+        for (
+            const menu
+            of collectMenuCandidates(root)
+        ) {
             if (
                 menu.closest(
                     '[data-crack-trash-custom-menu="true"]'
@@ -3444,7 +4074,10 @@
     const observer = new MutationObserver(mutations => {
         if (
             state.trashView &&
-            !state.trashView.root?.isConnected
+            (
+                !state.trashView.root?.isConnected ||
+                !state.trashView.overlay?.isConnected
+            )
         ) {
             closeCustomMenu();
 
@@ -3464,6 +4097,7 @@
                 }
 
                 scanMenus(node);
+                scanSidebarStructure(node);
             }
         }
     });
@@ -3499,8 +4133,9 @@
         });
 
         scanMenus(document);
+        scanSidebarStructure(document);
 
-        console.log("[Crack Trash] v1.9.0 로드 완료", {
+        console.log("[Crack Trash] v2.0.0 PC·모바일 통합 로드 완료", {
             capturedApiHeaders: [
                 ...state.capturedApiHeaders.keys(),
             ],
