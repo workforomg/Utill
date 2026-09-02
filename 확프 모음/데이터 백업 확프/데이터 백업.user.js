@@ -23,15 +23,18 @@
   const FORMAT_VERSION = 1;
   const CHECK_INTERVAL_MS = 5_000;
   const REQUEST_TIMEOUT_MS = 25_000;
+  const DEFAULT_AUTO_KEYS = ["crack-cloud-sync-test"];
   const KEYS = {
     enabled: "sync.enabled",
     cloudUrl: "sync.cloudUrl",
     syncKey: "sync.key",
     deviceId: "sync.deviceId",
     revision: "sync.revision",
-    lastHash: "sync.lastHash",
+    syncId: "sync.lastSyncId",
+    localFingerprint: "sync.localFingerprint",
     lastStatus: "sync.lastStatus",
     conflictBackup: "sync.conflictBackup",
+    storageKeys: "sync.localStorageKeys",
   };
 
   const runtime = {
@@ -65,9 +68,12 @@
     addMenu(`☁ 자동 동기화: ${enabled ? "켜짐" : "꺼짐"}`, toggleAutomaticSync);
     addMenu("⬆ 수동 내보내기", manualExport);
     addMenu("⬇ 수동 불러오기", manualImport);
+    addMenu("📦 자동 동기화 항목 설정", configureAutoStorageKeys);
+    addMenu("🔍 localStorage 키 목록", showLocalStorageKeys);
     addMenu("🌐 클라우드 주소", configureCloudUrl);
     addMenu("🔑 동기화 키", configureSyncKey);
     addMenu("🔄 지금 동기화", () => syncCycle({ forceRemote: true, manual: true }));
+    addMenu("⬆ 이 기기 데이터 강제 업로드", forceUploadCurrentDevice);
     addMenu("ℹ 동기화 상태", showStatus);
     if (getSetting(KEYS.conflictBackup, "")) {
       addMenu("⚠ 충돌본 내보내기", exportConflictBackup);
@@ -138,6 +144,44 @@
     restartIfEnabled();
   }
 
+  function configureAutoStorageKeys() {
+    const current = getAutoStorageKeys();
+    const input = prompt(
+      "자동 동기화할 localStorage 키를 한 줄에 하나씩 입력하세요.\n쉼표로 구분해도 됩니다.\n\nIndexedDB와 나머지 값은 수동 백업에서만 처리됩니다.",
+      current.join("\n"),
+    );
+    if (input === null) return;
+    const keys = [...new Set(input.split(/[\n,]/).map((key) => key.trim()).filter(Boolean))].sort();
+    if (!keys.length) {
+      alert("한 개 이상의 localStorage 키가 필요합니다.");
+      return;
+    }
+    setSetting(KEYS.storageKeys, keys);
+    resetSyncCursor();
+    alert(`자동 동기화 항목 ${keys.length}개를 저장했습니다.`);
+    restartIfEnabled();
+  }
+
+  function showLocalStorageKeys() {
+    const keys = [];
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (key !== null) keys.push(key);
+    }
+    keys.sort();
+    prompt(
+      `현재 localStorage 키 ${keys.length}개입니다. 필요한 키를 복사하세요.`,
+      keys.length ? keys.join("\n") : "(저장된 키 없음)",
+    );
+  }
+
+  function getAutoStorageKeys() {
+    const saved = getSetting(KEYS.storageKeys, DEFAULT_AUTO_KEYS);
+    if (!Array.isArray(saved)) return [...DEFAULT_AUTO_KEYS];
+    const keys = [...new Set(saved.filter((key) => typeof key === "string" && key.trim()).map((key) => key.trim()))];
+    return keys.length ? keys.sort() : [...DEFAULT_AUTO_KEYS];
+  }
+
   function restartIfEnabled() {
     if (!getSetting(KEYS.enabled, false)) return;
     stopAutomaticSync();
@@ -147,7 +191,8 @@
 
   function resetSyncCursor() {
     setSetting(KEYS.revision, 0);
-    setSetting(KEYS.lastHash, "");
+    setSetting(KEYS.syncId, "");
+    setSetting(KEYS.localFingerprint, "");
     setStatus("새 연결 설정됨");
   }
 
@@ -163,7 +208,7 @@
 
   async function startAutomaticSync() {
     if (runtime.running || runtime.stopped || !isConfigured(false)) return;
-    await syncCycle({ forceRemote: !getSetting(KEYS.lastHash, "") });
+    await syncCycle({ forceRemote: !getSetting(KEYS.syncId, "") });
     scheduleNextCycle();
   }
 
@@ -188,44 +233,46 @@
     runtime.running = true;
     try {
       const lastRevision = Number(getSetting(KEYS.revision, 0));
-      const lastHash = getSetting(KEYS.lastHash, "");
-      const remote = await fetchRemote(forceRemote || !lastHash);
-      const local = await captureSnapshot({ includeSessionStorage: false });
-      const localHash = await hashSnapshot(local);
+      const lastSyncId = getSetting(KEYS.syncId, "");
+      const baselineFingerprint = getSetting(KEYS.localFingerprint, "");
+      const remote = await fetchRemote(forceRemote || !lastSyncId);
+      const local = await captureSnapshot({ mode: "auto" });
+      const localFingerprint = await hashSnapshot(local);
 
       if (remote.kind === "snapshot") {
-        const remoteSnapshot = await decryptSnapshot(remote.payload);
-        validateSnapshot(remoteSnapshot);
-        const remoteHash = await hashSnapshot(remoteSnapshot);
-
-        if (remote.revision > lastRevision) {
-          if (lastHash && localHash !== lastHash && localHash !== remoteHash) {
+        if (remote.syncId !== lastSyncId) {
+          if (baselineFingerprint && localFingerprint !== baselineFingerprint) {
             await saveConflictBackup(local);
             notify("양쪽 기기에서 동시에 바뀌어 현재 기기 데이터를 충돌본으로 보관했습니다.");
           }
-          await applyRemoteSnapshot(remoteSnapshot, remote.revision, remoteHash);
+          const remoteSnapshot = await decryptSnapshot(remote.payload);
+          validateSnapshot(remoteSnapshot);
+          await applyRemoteSnapshot(remoteSnapshot, remote.revision, remote.syncId);
           return;
         }
 
-        if (localHash !== remoteHash) {
-          const result = await uploadSnapshot(local, localHash, remote.revision);
+        setSetting(KEYS.revision, remote.revision);
+        if (!baselineFingerprint) {
+          setSetting(KEYS.localFingerprint, localFingerprint);
+          setStatus(`기준값 설정 완료 · syncId ${shortSyncId(remote.syncId)}`);
+        } else if (localFingerprint !== baselineFingerprint) {
+          const result = await uploadSnapshot(local, localFingerprint, remote.revision);
           if (result === "conflict") await resolveConflict();
         } else {
-          setSetting(KEYS.lastHash, remoteHash);
-          setSetting(KEYS.revision, remote.revision);
-          setStatus(`동기화 완료 · 서버 버전 ${remote.revision}`);
+          setStatus(`최신 상태 · syncId ${shortSyncId(remote.syncId)}`);
         }
       } else if (remote.kind === "not-modified") {
-        if (!lastHash) {
-          setSetting(KEYS.lastHash, localHash);
-        } else if (localHash !== lastHash) {
-          const result = await uploadSnapshot(local, localHash, lastRevision);
+        if (!baselineFingerprint) {
+          setSetting(KEYS.localFingerprint, localFingerprint);
+          setStatus(`기준값 설정 완료 · syncId ${shortSyncId(lastSyncId)}`);
+        } else if (localFingerprint !== baselineFingerprint) {
+          const result = await uploadSnapshot(local, localFingerprint, lastRevision);
           if (result === "conflict") await resolveConflict();
         } else {
-          setStatus(`최신 상태 · 서버 버전 ${lastRevision}`);
+          setStatus(`최신 상태 · syncId ${shortSyncId(lastSyncId)}`);
         }
       } else if (remote.kind === "empty") {
-        const result = await uploadSnapshot(local, localHash, 0);
+        const result = await uploadSnapshot(local, localFingerprint, 0);
         if (result === "conflict") await resolveConflict();
       }
 
@@ -244,8 +291,13 @@
   async function fetchRemote(force = false) {
     const credentials = await getCredentials();
     const revision = Number(getSetting(KEYS.revision, 0));
+    const syncId = getSetting(KEYS.syncId, "");
     const headers = { Authorization: `Sync ${credentials.authToken}` };
-    if (!force && revision > 0) headers["If-None-Match"] = `"${revision}"`;
+    if (!force && syncId) {
+      headers["If-None-Match"] = `"${syncId.startsWith("revision:") ? syncId.slice(9) : syncId}"`;
+    } else if (!force && revision > 0) {
+      headers["If-None-Match"] = `"${revision}"`;
+    }
 
     const response = await httpRequest({
       method: "GET",
@@ -261,13 +313,14 @@
     return {
       kind: "snapshot",
       revision: Number(body.revision),
+      syncId: String(body.syncId || `revision:${body.revision}`),
       payload: body.payload,
       updatedAt: body.updatedAt,
       deviceId: body.deviceId,
     };
   }
 
-  async function uploadSnapshot(snapshot, snapshotHash, baseRevision) {
+  async function uploadSnapshot(snapshot, localFingerprint, baseRevision) {
     const credentials = await getCredentials();
     const encrypted = await encryptSnapshot(snapshot);
     const payload = JSON.stringify(encrypted);
@@ -293,32 +346,68 @@
     if (response.status !== 200) throw httpError(response);
 
     const body = JSON.parse(response.responseText);
+    const syncId = String(body.syncId || `revision:${body.revision}`);
     setSetting(KEYS.revision, Number(body.revision));
-    setSetting(KEYS.lastHash, snapshotHash);
-    setStatus(`업로드 완료 · 서버 버전 ${body.revision}`);
+    setSetting(KEYS.syncId, syncId);
+    setSetting(KEYS.localFingerprint, localFingerprint);
+    setStatus(`업로드 완료 · syncId ${shortSyncId(syncId)}`);
     return "uploaded";
   }
 
+  async function forceUploadCurrentDevice() {
+    if (runtime.running || runtime.applying) {
+      alert("현재 동기화가 끝난 뒤 다시 시도하세요.");
+      return;
+    }
+    if (!isConfigured(true)) return;
+    const proceed = confirm(
+      "이 기기의 선택된 localStorage 값을 서버 최신본으로 덮어씁니다.\n\n기존 데이터가 있는 PC에서만 먼저 실행하세요.",
+    );
+    if (!proceed) return;
+
+    runtime.running = true;
+    try {
+      const remote = await fetchRemote(true);
+      const baseRevision = remote.kind === "snapshot" ? remote.revision : 0;
+      const snapshot = await captureSnapshot({ mode: "auto" });
+      const localFingerprint = await hashSnapshot(snapshot);
+      const result = await uploadSnapshot(snapshot, localFingerprint, baseRevision);
+      if (result === "conflict") {
+        throw new Error("업로드 직전에 다른 기기가 저장했습니다. 다시 눌러주세요.");
+      }
+      alert("이 기기 데이터를 새 syncId로 업로드했습니다. 이제 다른 기기에서 자동 동기화를 켜세요.");
+    } catch (error) {
+      console.error("[Storage Sync]", error);
+      setStatus(`강제 업로드 오류 · ${error.message}`);
+      alert(`강제 업로드 실패\n${error.message}`);
+    } finally {
+      runtime.running = false;
+    }
+  }
+
   async function resolveConflict() {
-    const local = await captureSnapshot({ includeSessionStorage: false });
+    const local = await captureSnapshot({ mode: "auto" });
     await saveConflictBackup(local);
     const remote = await fetchRemote(true);
     if (remote.kind !== "snapshot") throw new Error("충돌 후 서버 데이터를 읽지 못했습니다.");
     const snapshot = await decryptSnapshot(remote.payload);
     validateSnapshot(snapshot);
-    const hash = await hashSnapshot(snapshot);
     notify("다른 기기의 저장이 먼저 완료되어 서버 데이터를 적용합니다. 현재 값은 충돌본으로 보관했습니다.");
-    await applyRemoteSnapshot(snapshot, remote.revision, hash);
+    await applyRemoteSnapshot(snapshot, remote.revision, remote.syncId);
   }
 
-  async function applyRemoteSnapshot(snapshot, revision, hash) {
+  async function applyRemoteSnapshot(snapshot, revision, syncId) {
     runtime.applying = true;
-    setStatus(`서버 버전 ${revision} 적용 중`);
+    setStatus(`새 syncId ${shortSyncId(syncId)} 적용 중`);
     try {
-      await restoreSnapshot(snapshot, { restoreSessionStorage: false });
+      await restoreSnapshot(snapshot, { mode: "auto" });
+      const appliedSnapshot = await captureSnapshot({ mode: "auto" });
+      const appliedFingerprint = await hashSnapshot(appliedSnapshot);
       setSetting(KEYS.revision, revision);
-      setSetting(KEYS.lastHash, hash);
-      setStatus(`불러오기 완료 · 서버 버전 ${revision} · 자동 새로고침 안 함`);
+      setSetting(KEYS.syncId, syncId);
+      setSetting(KEYS.localFingerprint, appliedFingerprint);
+      setStatus(`불러오기 완료 · syncId ${shortSyncId(syncId)} · 한 번만 새로고침`);
+      location.reload();
     } finally {
       runtime.applying = false;
     }
@@ -326,7 +415,7 @@
 
   async function manualExport() {
     try {
-      const snapshot = await captureSnapshot({ includeSessionStorage: true });
+      const snapshot = await captureSnapshot({ mode: "manual" });
       const syncKey = getSetting(KEYS.syncKey, "");
       let file;
       if (syncKey) {
@@ -382,8 +471,7 @@
             ? await decryptSnapshot(wrapper.payload)
             : wrapper.snapshot;
           validateSnapshot(snapshot, false);
-          await restoreSnapshot(snapshot, { restoreSessionStorage: true });
-          setSetting(KEYS.lastHash, "");
+          await restoreSnapshot(snapshot, { mode: "manual" });
           setStatus("수동 불러오기 완료 · 새로고침 중");
           alert("불러오기를 완료했습니다. 페이지를 새로고침합니다.");
           location.reload();
@@ -433,26 +521,49 @@
   function showStatus() {
     const status = getSetting(KEYS.lastStatus, "아직 동기화 기록이 없습니다.");
     const revision = getSetting(KEYS.revision, 0);
+    const syncId = getSetting(KEYS.syncId, "없음");
     const url = getSetting(KEYS.cloudUrl, "설정 안 됨");
     alert(
-      `상태: ${status}\n서버 버전: ${revision}\n클라우드: ${url}\n확인 주기: ${CHECK_INTERVAL_MS / 1000}초`,
+      `상태: ${status}\nsyncId: ${syncId}\n서버 버전: ${revision}\n클라우드: ${url}\n확인 주기: ${CHECK_INTERVAL_MS / 1000}초`,
     );
   }
 
-  async function captureSnapshot({ includeSessionStorage = false } = {}) {
+  function shortSyncId(syncId) {
+    const value = String(syncId || "없음");
+    return value.length > 12 ? `${value.slice(0, 12)}…` : value;
+  }
+
+  async function captureSnapshot({ mode = "auto" } = {}) {
     const warnings = [];
+    const manual = mode === "manual";
+    const selectedKeys = manual ? null : getAutoStorageKeys();
     return {
       format: FORMAT,
       version: FORMAT_VERSION,
       origin: location.origin,
       capturedAt: new Date().toISOString(),
-      localStorage: dumpStorage(localStorage, warnings, "localStorage"),
-      sessionStorage: includeSessionStorage
-        ? dumpStorage(sessionStorage, warnings, "sessionStorage")
-        : null,
-      indexedDB: await dumpIndexedDatabases(warnings),
+      scope: manual ? "manual-full" : "auto-selected",
+      localStorageKeys: selectedKeys,
+      localStorage: manual
+        ? dumpStorage(localStorage, warnings, "localStorage")
+        : dumpSelectedStorage(localStorage, selectedKeys, warnings),
+      sessionStorage: manual ? dumpStorage(sessionStorage, warnings, "sessionStorage") : null,
+      indexedDB: manual ? await dumpIndexedDatabases(warnings) : null,
       warnings,
     };
+  }
+
+  function dumpSelectedStorage(storage, keys, warnings) {
+    const output = {};
+    try {
+      for (const key of keys) {
+        const value = storage.getItem(key);
+        if (value !== null) output[key] = value;
+      }
+    } catch (error) {
+      warnings.push(`localStorage: ${error.message}`);
+    }
+    return output;
   }
 
   function dumpStorage(storage, warnings, label) {
@@ -548,13 +659,28 @@
     });
   }
 
-  async function restoreSnapshot(snapshot, { restoreSessionStorage = false } = {}) {
-    restoreStorage(localStorage, snapshot.localStorage || {});
-    if (restoreSessionStorage && snapshot.sessionStorage) {
-      restoreStorage(sessionStorage, snapshot.sessionStorage);
+  async function restoreSnapshot(snapshot, { mode = "auto" } = {}) {
+    if (mode === "manual") {
+      restoreStorage(localStorage, snapshot.localStorage || {});
+      if (snapshot.sessionStorage) restoreStorage(sessionStorage, snapshot.sessionStorage);
+      for (const database of snapshot.indexedDB || []) await restoreOneDatabase(database);
+      return;
     }
-    for (const database of snapshot.indexedDB || []) {
-      await restoreOneDatabase(database);
+
+    const remoteKeys =
+      snapshot.scope === "auto-selected" && Array.isArray(snapshot.localStorageKeys)
+        ? snapshot.localStorageKeys
+        : getAutoStorageKeys();
+    const selectedKeys = [...new Set(remoteKeys.filter((key) => typeof key === "string" && key.trim()).map((key) => key.trim()))].sort();
+    if (!selectedKeys.length) throw new Error("서버의 자동 동기화 항목이 비어 있습니다.");
+    setSetting(KEYS.storageKeys, selectedKeys);
+    restoreSelectedStorage(localStorage, snapshot.localStorage || {}, selectedKeys);
+  }
+
+  function restoreSelectedStorage(storage, values, keys) {
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(values, key)) storage.setItem(key, values[key]);
+      else storage.removeItem(key);
     }
   }
 
@@ -981,6 +1107,8 @@
       format: snapshot.format,
       version: snapshot.version,
       origin: snapshot.origin,
+      scope: snapshot.scope,
+      localStorageKeys: snapshot.localStorageKeys,
       localStorage: snapshot.localStorage,
       sessionStorage: snapshot.sessionStorage,
       indexedDB: snapshot.indexedDB,
