@@ -1,9 +1,42 @@
 {
-  "schemaVersion": 1,
-  "revision": "2026-09-03-1",
+  "schemaVersion": 2,
+  "revision": "2026-09-03-2",
   "sites": {
     "https://crack.wrtn.ai": {
-      "extensions": []
+      "extensions": [
+        {
+          "id": "erie-crack-lore-injector",
+          "localStorage": {
+            "keys": [],
+            "prefixes": [
+              "lore-",
+              "speech-refiner-"
+            ]
+          },
+          "sessionStorage": {
+            "keys": [
+              "lore-router-chat-hint-shown"
+            ],
+            "prefixes": [
+              "lore-router-chat-reload:"
+            ]
+          },
+          "indexedDB": [
+            {
+              "name": "lore-injector",
+              "stores": [
+                "entries",
+                "packs",
+                "snapshots",
+                "embeddings",
+                "workingMemory",
+                "encounters",
+                "entryVersions"
+              ]
+            }
+          ]
+        }
+      ]
     }
   }
 }
