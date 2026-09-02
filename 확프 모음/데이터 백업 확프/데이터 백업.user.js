@@ -190,7 +190,7 @@
       const lastRevision = Number(getSetting(KEYS.revision, 0));
       const lastHash = getSetting(KEYS.lastHash, "");
       const remote = await fetchRemote(forceRemote || !lastHash);
-      const local = await captureSnapshot();
+      const local = await captureSnapshot({ includeSessionStorage: false });
       const localHash = await hashSnapshot(local);
 
       if (remote.kind === "snapshot") {
@@ -300,7 +300,7 @@
   }
 
   async function resolveConflict() {
-    const local = await captureSnapshot();
+    const local = await captureSnapshot({ includeSessionStorage: false });
     await saveConflictBackup(local);
     const remote = await fetchRemote(true);
     if (remote.kind !== "snapshot") throw new Error("충돌 후 서버 데이터를 읽지 못했습니다.");
@@ -315,11 +315,10 @@
     runtime.applying = true;
     setStatus(`서버 버전 ${revision} 적용 중`);
     try {
-      await restoreSnapshot(snapshot);
+      await restoreSnapshot(snapshot, { restoreSessionStorage: false });
       setSetting(KEYS.revision, revision);
       setSetting(KEYS.lastHash, hash);
-      setStatus(`불러오기 완료 · 서버 버전 ${revision}`);
-      setTimeout(() => location.reload(), 150);
+      setStatus(`불러오기 완료 · 서버 버전 ${revision} · 자동 새로고침 안 함`);
     } finally {
       runtime.applying = false;
     }
@@ -327,7 +326,7 @@
 
   async function manualExport() {
     try {
-      const snapshot = await captureSnapshot();
+      const snapshot = await captureSnapshot({ includeSessionStorage: true });
       const syncKey = getSetting(KEYS.syncKey, "");
       let file;
       if (syncKey) {
@@ -383,7 +382,7 @@
             ? await decryptSnapshot(wrapper.payload)
             : wrapper.snapshot;
           validateSnapshot(snapshot, false);
-          await restoreSnapshot(snapshot);
+          await restoreSnapshot(snapshot, { restoreSessionStorage: true });
           setSetting(KEYS.lastHash, "");
           setStatus("수동 불러오기 완료 · 새로고침 중");
           alert("불러오기를 완료했습니다. 페이지를 새로고침합니다.");
@@ -440,7 +439,7 @@
     );
   }
 
-  async function captureSnapshot() {
+  async function captureSnapshot({ includeSessionStorage = false } = {}) {
     const warnings = [];
     return {
       format: FORMAT,
@@ -448,7 +447,9 @@
       origin: location.origin,
       capturedAt: new Date().toISOString(),
       localStorage: dumpStorage(localStorage, warnings, "localStorage"),
-      sessionStorage: dumpStorage(sessionStorage, warnings, "sessionStorage"),
+      sessionStorage: includeSessionStorage
+        ? dumpStorage(sessionStorage, warnings, "sessionStorage")
+        : null,
       indexedDB: await dumpIndexedDatabases(warnings),
       warnings,
     };
@@ -547,9 +548,11 @@
     });
   }
 
-  async function restoreSnapshot(snapshot) {
+  async function restoreSnapshot(snapshot, { restoreSessionStorage = false } = {}) {
     restoreStorage(localStorage, snapshot.localStorage || {});
-    restoreStorage(sessionStorage, snapshot.sessionStorage || {});
+    if (restoreSessionStorage && snapshot.sessionStorage) {
+      restoreStorage(sessionStorage, snapshot.sessionStorage);
+    }
     for (const database of snapshot.indexedDB || []) {
       await restoreOneDatabase(database);
     }
