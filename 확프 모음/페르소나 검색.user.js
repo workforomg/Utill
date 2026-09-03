@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         프로필 검색 + 정보 표시
 // @namespace    https://github.com/workforomg/Utill
-// @version      0.5.0
+// @version      0.6.0
 // @author       지유지요
 // @description  프로필 선택창에 이름/정보 검색 및 프로필 정보 표시
 // @match        https://crack.wrtn.ai/*
@@ -31,7 +31,6 @@
     // 현재 열려 있는 listbox
     const activeListboxes = new Set();
 
-
     /********************************************************************
      * 공통
      ********************************************************************/
@@ -55,13 +54,32 @@
         );
     }
 
-
     /********************************************************************
      * 응답 내부에서 chatProfiles 탐색
      ********************************************************************/
 
     function findChatProfiles(value, depth = 0) {
-        if (!value || depth > 5) {
+        if (!value || depth > 8) {
+            return null;
+        }
+
+        if (Array.isArray(value)) {
+            for (const child of value) {
+                if (
+                    child &&
+                    typeof child === 'object'
+                ) {
+                    const found = findChatProfiles(
+                        child,
+                        depth + 1
+                    );
+
+                    if (found) {
+                        return found;
+                    }
+                }
+            }
+
             return null;
         }
 
@@ -99,7 +117,6 @@
         return null;
     }
 
-
     /********************************************************************
      * 프로필 저장
      ********************************************************************/
@@ -122,7 +139,6 @@
 
         refreshActiveListboxes();
     }
-
 
     /********************************************************************
      * fetch 후킹
@@ -181,7 +197,6 @@
 
         log('fetch 감시 시작');
     }
-
 
     /********************************************************************
      * XHR 후킹
@@ -248,9 +263,8 @@
         log('XHR 감시 시작');
     }
 
-
     /********************************************************************
-     * Radix option 관련
+     * listbox/option 관련
      ********************************************************************/
 
     function getViewport(listbox) {
@@ -260,22 +274,31 @@
             ) ||
             listbox.querySelector(
                 '[data-radix-select-viewport]'
-            )
+            ) ||
+            Array.from(
+                listbox.children
+            ).find(
+                child =>
+                    child.getAttribute('role') ===
+                        'presentation' &&
+                    child.querySelector(
+                        '[role="option"]'
+                    )
+            ) ||
+            listbox
         );
     }
 
     function getOptions(listbox) {
-        const viewport =
-            getViewport(listbox);
-
-        if (!viewport) {
-            return [];
-        }
-
         return Array.from(
-            viewport.querySelectorAll(
-                '[role="option"][data-radix-collection-item]'
+            listbox.querySelectorAll(
+                '[role="option"]'
             )
+        ).filter(
+            option =>
+                option.closest(
+                    '[role="listbox"]'
+                ) === listbox
         );
     }
 
@@ -331,26 +354,155 @@
         );
     }
 
+    /********************************************************************
+     * 프로필 Select인지 판단
+     ********************************************************************/
 
- /********************************************************************
- * 프로필 Select인지 판단
- ********************************************************************/
+    function getControllingCombobox(
+        listbox
+    ) {
+        const listboxId =
+            listbox.id;
+
+        if (listboxId) {
+            const comboboxes =
+                document.querySelectorAll(
+                    '[role="combobox"][aria-controls], ' +
+                    '[role="combobox"][aria-owns]'
+                );
+
+            for (const combobox of comboboxes) {
+                if (
+                    combobox.getAttribute(
+                        'aria-controls'
+                    ) === listboxId ||
+                    combobox.getAttribute(
+                        'aria-owns'
+                    ) === listboxId
+                ) {
+                    return combobox;
+                }
+            }
+        }
+
+        /*
+         * 최신 미리보기/상세 화면은 팝업 wrapper를
+         * 콤보박스와 같은 필드 안에 렌더링한다.
+         */
+        const popupWrapper =
+            listbox.closest(
+                '[data-radix-popper-content-wrapper]'
+            );
+
+        const field =
+            popupWrapper?.parentElement;
+
+        return (
+            field?.querySelector(
+                ':scope > [role="combobox"]'
+            ) ||
+            null
+        );
+    }
+
+    function hasProfileFieldLabel(
+        combobox
+    ) {
+        if (!combobox) {
+            return false;
+        }
+
+        const isProfileLabel = value => {
+            const normalized =
+                normalizeText(value);
+
+            return (
+                normalized === '대화프로필' ||
+                normalized === '채팅프로필'
+            );
+        };
+
+        if (
+            isProfileLabel(
+                combobox.getAttribute(
+                    'aria-label'
+                )
+            )
+        ) {
+            return true;
+        }
+
+        const labelledBy =
+            combobox.getAttribute(
+                'aria-labelledby'
+            );
+
+        if (labelledBy) {
+            for (
+                const id
+                of labelledBy.split(/\s+/)
+            ) {
+                if (
+                    isProfileLabel(
+                        document
+                            .getElementById(id)
+                            ?.textContent
+                    )
+                ) {
+                    return true;
+                }
+            }
+        }
+
+        let sibling =
+            combobox.previousElementSibling;
+
+        while (sibling) {
+            if (
+                isProfileLabel(
+                    sibling.textContent
+                )
+            ) {
+                return true;
+            }
+
+            sibling =
+                sibling.previousElementSibling;
+        }
+
+        return false;
+    }
 
     function looksLikeProfileListbox(listbox) {
         if (!listbox) {
             return false;
         }
-    
+
         const options =
             getOptions(listbox);
-    
+
         if (!options.length) {
             return false;
         }
-    
+
         /*
-         * API 데이터를 알고 있다면
-         * 이름 일치율로 판단
+         * 최신 구조:
+         * listbox id ↔ combobox aria-controls 연결과
+         * 필드 라벨로 즉시 판별한다.
+         */
+        if (
+            hasProfileFieldLabel(
+                getControllingCombobox(
+                    listbox
+                )
+            )
+        ) {
+            return true;
+        }
+
+        /*
+         * 이전 구조 호환:
+         * API 데이터를 알고 있다면 이름 일치율로 판단
          */
         if (chatProfiles.length) {
             const profileNames =
@@ -363,33 +515,27 @@
                         )
                         .filter(Boolean)
                 );
-    
+
             let matched = 0;
-    
+
             for (const option of options) {
                 const name =
                     normalizeText(
                         getOptionName(option)
                     );
-    
+
                 if (profileNames.has(name)) {
                     matched++;
                 }
             }
-    
+
             return (
                 matched >= 1 &&
                 matched / options.length >= 0.5
             );
         }
-    
-        /*
-         * API 데이터를 아직 받지 못했다면
-         * 프로필 Select인지 판단하지 않고 대기.
-         *
-         * 이후 chatProfiles가 감지되면
-         * refreshActiveListboxes()에서 다시 검사됨.
-         */
+
+        // API 데이터와 구조 단서가 모두 없으면 대기
         return false;
     }
 
@@ -410,12 +556,46 @@
                 'aria-labelledby'
             );
 
-        const nameSpan =
+        let nameSpan =
             labelledBy
                 ? document.getElementById(
                     labelledBy
                 )
                 : null;
+
+        if (!nameSpan) {
+            nameSpan =
+                option.querySelector(
+                    '[data-profile-name]'
+                );
+        }
+
+        if (!nameSpan) {
+            const optionName =
+                normalizeText(
+                    getOptionName(option)
+                );
+
+            const children =
+                Array.from(
+                    option.children
+                );
+
+            nameSpan =
+                children
+                    .reverse()
+                    .find(
+                        child =>
+                            !child.matches(
+                                '[data-profile-info], ' +
+                                '[data-profile-info-wrap]'
+                            ) &&
+                            normalizeText(
+                                child.textContent
+                            ) === optionName
+                    ) ||
+                null;
+        }
 
         if (!nameSpan) {
             return;
@@ -427,7 +607,7 @@
             );
 
         /*
-         * 최초 1회만 이름 span을 wrapper 안으로 이동
+         * 최초 1회만 이름 요소를 wrapper 안으로 이동
          */
         if (!wrapper) {
             wrapper =
@@ -476,8 +656,8 @@
             );
 
             /*
-             * 원래 option의 "*" grow 스타일이
-             * 내부 span들에 이상하게 적용되는 경우 방지
+             * option의 grow 스타일이
+             * 내부 span에 잘못 적용되는 경우 방지
              */
             wrapper.style.flexGrow = '1';
         }
@@ -496,9 +676,6 @@
                     .trim()
                 : '';
 
-        /*
-         * 정보 없는 프로필
-         */
         if (!information) {
             if (infoText) {
                 infoText.remove();
@@ -518,23 +695,17 @@
                 infoText.style,
                 {
                     display: 'block',
-
                     width: '100%',
                     minWidth: '0',
                     maxWidth: '100%',
-
                     marginTop: '0px',
-
                     fontSize: '10px',
                     lineHeight: '12px',
                     fontWeight: '400',
-
                     opacity: '0.55',
-
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
-
                     pointerEvents: 'none'
                 }
             );
@@ -547,13 +718,10 @@
         infoText.textContent =
             information;
 
-        /*
-         * 마우스를 올리면 전체 정보 표시
-         */
+        // 마우스를 올리면 전체 정보 표시
         infoText.title =
             information;
     }
-
 
     /********************************************************************
      * API 프로필 ↔ DOM option 매핑
@@ -589,9 +757,7 @@
 
         /*
          * 이름별 bucket
-         *
-         * 동일 이름이 여러 개 있어도
-         * 각 프로필을 따로 매칭하기 위함
+         * 동일 이름이 여러 개여도 각각 매칭
          */
         const profileBuckets =
             new Map();
@@ -650,8 +816,7 @@
 
             /*
              * 1순위:
-             * API 순서와 DOM 순서가 같고
-             * 이름까지 동일
+             * API 순서와 DOM 순서가 같고 이름도 동일
              */
             const directProfile =
                 chatProfiles[index];
@@ -691,7 +856,7 @@
 
             /*
              * 2순위:
-             * 동일 이름 중 아직 사용되지 않은 프로필
+             * 같은 이름 중 아직 사용되지 않은 프로필
              */
             if (!profile) {
                 const bucket =
@@ -730,7 +895,6 @@
             );
         }
     }
-
 
     /********************************************************************
      * 검색 캐시 구성
@@ -779,17 +943,13 @@
                 profile.information || '';
         }
 
-        /*
-         * 이름 아래 information 출력
-         */
         renderOptionInfo(
             option,
             profile
         );
 
         /*
-         * 이름 + information + id
-         * 모두 검색 가능
+         * 이름 + information + id 검색 가능
          */
         optionSearchCache.set(
             option,
@@ -800,7 +960,6 @@
             )
         );
     }
-
 
     /********************************************************************
      * 검색
@@ -819,10 +978,7 @@
             getOptions(listbox);
 
         if (!keyword) {
-            for (
-                const option
-                of options
-            ) {
+            for (const option of options) {
                 option.hidden = false;
 
                 option.style
@@ -842,10 +998,7 @@
 
         let visibleCount = 0;
 
-        for (
-            const option
-            of options
-        ) {
+        for (const option of options) {
             let searchText =
                 optionSearchCache.get(
                     option
@@ -896,7 +1049,6 @@
         );
     }
 
-
     /********************************************************************
      * 검색 결과 개수
      ********************************************************************/
@@ -920,7 +1072,6 @@
                 ? String(total)
                 : `${visible}/${total}`;
     }
-
 
     /********************************************************************
      * 검색 UI
@@ -948,21 +1099,13 @@
             wrapper.style,
             {
                 flex: '0 0 auto',
-
-                padding:
-                    '7px 8px 6px',
-
+                padding: '7px 8px 6px',
                 position: 'sticky',
                 top: '0',
-
                 zIndex: '20',
-
-                boxSizing:
-                    'border-box',
-
+                boxSizing: 'border-box',
                 background:
                     'hsl(var(--popover))',
-
                 borderBottom:
                     '1px solid hsl(var(--border))'
             }
@@ -988,10 +1131,8 @@
             );
 
         input.type = 'search';
-
         input.placeholder =
             '이름 · 프로필 정보 검색';
-
         input.autocomplete = 'off';
         input.spellcheck = false;
 
@@ -1006,28 +1147,17 @@
                 flex: '1 1 auto',
                 minWidth: '0',
                 width: '100%',
-
                 height: '32px',
-
-                padding:
-                    '0 10px',
-
-                boxSizing:
-                    'border-box',
-
+                padding: '0 10px',
+                boxSizing: 'border-box',
                 border:
                     '1px solid hsl(var(--border))',
-
                 borderRadius: '6px',
-
                 outline: 'none',
-
                 background:
                     'hsl(var(--background))',
-
                 color:
                     'hsl(var(--foreground))',
-
                 font: 'inherit',
                 fontSize: '13px'
             }
@@ -1046,13 +1176,9 @@
             {
                 flex: '0 0 auto',
                 minWidth: '28px',
-
                 textAlign: 'right',
-
                 fontSize: '10px',
-
                 opacity: '0.5',
-
                 userSelect: 'none'
             }
         );
@@ -1069,24 +1195,31 @@
         /*
          * 검색창을 viewport 위에 삽입
          */
-        listbox.insertBefore(
+        const searchHost =
+            viewport === listbox
+                ? listbox
+                : viewport.parentElement ||
+                    listbox;
+
+        searchHost.insertBefore(
             wrapper,
-            viewport
+            viewport === listbox
+                ? listbox.firstChild
+                : viewport
         );
 
         /*
          * Radix가 viewport 높이를
-         * trigger 높이로 제한해놓는 경우 대응
+         * trigger 높이로 제한하는 경우 대응
          */
-        viewport.style.height =
-            'auto';
+        if (viewport !== listbox) {
+            viewport.style.height =
+                'auto';
 
-        viewport.style.maxHeight =
-            'calc(var(--radix-select-content-available-height, 500px) - 48px)';
+            viewport.style.maxHeight =
+                'calc(var(--radix-select-content-available-height, 500px) - 48px)';
+        }
 
-        /*
-         * 프로필 정보 매핑
-         */
         mapProfilesToOptions(
             listbox
         );
@@ -1102,11 +1235,9 @@
             initialCount
         );
 
-
-        /****************************************************************
-         * input 이벤트
-         ****************************************************************/
-
+        /*
+         * 검색 입력
+         */
         input.addEventListener(
             'input',
             () => {
@@ -1120,22 +1251,18 @@
             }
         );
 
-
-        /****************************************************************
+        /*
          * 키보드
-         ****************************************************************/
-
+         */
         input.addEventListener(
             'keydown',
             event => {
-
                 /*
                  * 검색어가 있는 상태에서 Esc
                  * → 검색어만 지우기
                  */
                 if (
-                    event.key ===
-                        'Escape' &&
+                    event.key === 'Escape' &&
                     input.value
                 ) {
                     event.preventDefault();
@@ -1153,11 +1280,10 @@
 
                 /*
                  * 검색어가 비어 있을 때 Esc
-                 * → Radix에 전달해서 팝업 닫힘
+                 * → Radix에 전달하여 팝업 닫기
                  */
                 if (
-                    event.key ===
-                    'Escape'
+                    event.key === 'Escape'
                 ) {
                     return;
                 }
@@ -1167,8 +1293,7 @@
                  * → 현재 검색 결과 첫 번째 선택
                  */
                 if (
-                    event.key ===
-                    'Enter'
+                    event.key === 'Enter'
                 ) {
                     const firstVisible =
                         getOptions(
@@ -1182,9 +1307,7 @@
                                     'none'
                         );
 
-                    if (
-                        firstVisible
-                    ) {
+                    if (firstVisible) {
                         event.preventDefault();
                         event.stopPropagation();
 
@@ -1202,11 +1325,9 @@
             true
         );
 
-
-        /****************************************************************
+        /*
          * 마우스 이벤트 충돌 방지
-         ****************************************************************/
-
+         */
         for (
             const eventName
             of [
@@ -1223,11 +1344,9 @@
             );
         }
 
-
-        /****************************************************************
+        /*
          * 포커스 효과
-         ****************************************************************/
-
+         */
         input.addEventListener(
             'focus',
             () => {
@@ -1244,9 +1363,8 @@
             }
         );
 
-
         /*
-         * 팝업 열리면 바로 검색 가능
+         * 팝업이 열리면 바로 검색 가능
          */
         requestAnimationFrame(
             () => {
@@ -1256,8 +1374,7 @@
                 ) {
                     try {
                         input.focus({
-                            preventScroll:
-                                true
+                            preventScroll: true
                         });
                     } catch {
                         input.focus();
@@ -1270,7 +1387,6 @@
             '프로필 검색창 추가'
         );
     }
-
 
     /********************************************************************
      * listbox 처리
@@ -1293,7 +1409,7 @@
 
         if (
             listbox.querySelector(
-                ':scope > [data-profile-search]'
+                '[data-profile-search]'
             )
         ) {
             processedListboxes.add(
@@ -1328,22 +1444,16 @@
         );
     }
 
-
     /********************************************************************
      * API 갱신 시 열린 팝업 업데이트
      ********************************************************************/
 
     function refreshActiveListboxes() {
-        /*
-         * 이미 열린 검색창 갱신
-         */
         for (
             const listbox
             of activeListboxes
         ) {
-            if (
-                !listbox.isConnected
-            ) {
+            if (!listbox.isConnected) {
                 activeListboxes.delete(
                     listbox
                 );
@@ -1369,13 +1479,12 @@
         }
 
         /*
-         * API가 늦게 들어와서
-         * 이전에는 프로필 Select인지
-         * 판단하지 못한 팝업 재검사
+         * API가 늦게 들어왔거나
+         * 이전에 옵션이 없었던 목록 재검사
          */
         document
             .querySelectorAll(
-                '[data-radix-popper-content-wrapper] [role="listbox"]'
+                '[role="listbox"]'
             )
             .forEach(
                 listbox => {
@@ -1386,9 +1495,8 @@
             );
     }
 
-
     /********************************************************************
-     * 새 DOM만 검사
+     * 새 DOM 검사
      ********************************************************************/
 
     function inspectAddedNode(
@@ -1400,60 +1508,54 @@
             return;
         }
 
+        const listboxes =
+            new Set();
+
         if (
             node.matches(
                 '[role="listbox"]'
             )
         ) {
-            if (
-                node.closest(
-                    '[data-radix-popper-content-wrapper]'
-                )
-            ) {
-                activeListboxes.add(
-                    node
-                );
-
-                attachSearch(
-                    node
-                );
-            }
+            listboxes.add(node);
         }
 
-        const listboxes =
-            node.querySelectorAll?.(
+        /*
+         * listbox가 먼저 생성되고 option이
+         * 나중에 추가되는 구조도 다시 검사
+         */
+        const ownerListbox =
+            node.closest(
                 '[role="listbox"]'
             );
 
-        if (!listboxes?.length) {
-            return;
+        if (ownerListbox) {
+            listboxes.add(
+                ownerListbox
+            );
         }
+
+        node.querySelectorAll?.(
+            '[role="listbox"]'
+        ).forEach(
+            listbox => {
+                listboxes.add(
+                    listbox
+                );
+            }
+        );
 
         for (
             const listbox
             of listboxes
         ) {
-            if (
-                !listbox.closest(
-                    '[data-radix-popper-content-wrapper]'
-                )
-            ) {
-                continue;
-            }
-
-            activeListboxes.add(
-                listbox
-            );
-
             attachSearch(
                 listbox
             );
         }
     }
 
-
     /********************************************************************
-     * 제거된 popup 정리
+     * 제거된 팝업 정리
      ********************************************************************/
 
     let cleanupQueued = false;
@@ -1473,9 +1575,7 @@
                     const listbox
                     of activeListboxes
                 ) {
-                    if (
-                        !listbox.isConnected
-                    ) {
+                    if (!listbox.isConnected) {
                         activeListboxes.delete(
                             listbox
                         );
@@ -1484,7 +1584,6 @@
             }
         );
     }
-
 
     /********************************************************************
      * MutationObserver
@@ -1497,18 +1596,14 @@
             }
 
             /*
-             * 스크립트보다 먼저 열린 popup
+             * 스크립트보다 먼저 열린 목록 검사
              */
             document
                 .querySelectorAll(
-                    '[data-radix-popper-content-wrapper] [role="listbox"]'
+                    '[role="listbox"]'
                 )
                 .forEach(
                     listbox => {
-                        activeListboxes.add(
-                            listbox
-                        );
-
                         attachSearch(
                             listbox
                         );
@@ -1557,7 +1652,7 @@
             );
 
             log(
-                'Radix 팝업 감시 시작'
+                '프로필 선택 팝업 감시 시작'
             );
         };
 
@@ -1574,7 +1669,6 @@
         }
     }
 
-
     /********************************************************************
      * 실행
      ********************************************************************/
@@ -1582,5 +1676,4 @@
     hookFetch();
     hookXHR();
     startDOMObserver();
-
 })();
