@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         프로필 검색 + 정보 표시
 // @namespace    https://github.com/workforomg/Utill
-// @version      0.6.0
+// @version      0.7.1
 // @author       지유지요
 // @description  프로필 선택창에 이름/정보 검색 및 프로필 정보 표시
 // @match        https://crack.wrtn.ai/*
@@ -31,6 +31,7 @@
     // 현재 열려 있는 listbox
     const activeListboxes = new Set();
 
+
     /********************************************************************
      * 공통
      ********************************************************************/
@@ -53,6 +54,7 @@
             !Array.isArray(value)
         );
     }
+
 
     /********************************************************************
      * 응답 내부에서 chatProfiles 탐색
@@ -117,6 +119,7 @@
         return null;
     }
 
+
     /********************************************************************
      * 프로필 저장
      ********************************************************************/
@@ -139,6 +142,7 @@
 
         refreshActiveListboxes();
     }
+
 
     /********************************************************************
      * fetch 후킹
@@ -197,6 +201,7 @@
 
         log('fetch 감시 시작');
     }
+
 
     /********************************************************************
      * XHR 후킹
@@ -263,8 +268,9 @@
         log('XHR 감시 시작');
     }
 
+
     /********************************************************************
-     * listbox/option 관련
+     * Radix option 관련
      ********************************************************************/
 
     function getViewport(listbox) {
@@ -354,6 +360,7 @@
         );
     }
 
+
     /********************************************************************
      * 프로필 Select인지 판단
      ********************************************************************/
@@ -393,7 +400,6 @@
             listbox.closest(
                 '[data-radix-popper-content-wrapper]'
             );
-
         const field =
             popupWrapper?.parentElement;
 
@@ -473,6 +479,97 @@
         return false;
     }
 
+    function constrainListboxLayout(
+        listbox,
+        viewport
+    ) {
+        const combobox =
+            getControllingCombobox(
+                listbox
+            );
+        const triggerWidth =
+            combobox
+                ?.getBoundingClientRect()
+                .width || 0;
+        const width =
+            triggerWidth > 0
+                ? `${Math.round(triggerWidth)}px`
+                : 'var(--radix-select-trigger-width, 320px)';
+        const popperWrapper =
+            listbox.closest(
+                '[data-radix-popper-content-wrapper]'
+            );
+
+        /*
+         * 최신 구조의 popper wrapper는 min-width가
+         * max-content라 긴 information만큼 가로로 늘어난다.
+         * 트리거 너비를 기준으로 고정하고 내부만 말줄임한다.
+         */
+        for (
+            const element
+            of [popperWrapper, listbox]
+        ) {
+            if (!element) {
+                continue;
+            }
+
+            element.style.setProperty(
+                'width',
+                width,
+                'important'
+            );
+            element.style.setProperty(
+                'min-width',
+                '0',
+                'important'
+            );
+            element.style.setProperty(
+                'max-width',
+                'calc(100vw - 16px)',
+                'important'
+            );
+            element.style.setProperty(
+                'box-sizing',
+                'border-box',
+                'important'
+            );
+            element.style.setProperty(
+                'overflow-x',
+                'hidden',
+                'important'
+            );
+        }
+
+        if (viewport) {
+            Object.assign(
+                viewport.style,
+                {
+                    width: '100%',
+                    minWidth: '0',
+                    maxWidth: '100%',
+                    boxSizing: 'border-box',
+                    overflowX: 'hidden'
+                }
+            );
+        }
+
+        for (
+            const option
+            of getOptions(listbox)
+        ) {
+            Object.assign(
+                option.style,
+                {
+                    width: '100%',
+                    minWidth: '0',
+                    maxWidth: '100%',
+                    boxSizing: 'border-box',
+                    overflow: 'hidden'
+                }
+            );
+        }
+    }
+
     function looksLikeProfileListbox(listbox) {
         if (!listbox) {
             return false;
@@ -535,13 +632,728 @@
             );
         }
 
-        // API 데이터와 구조 단서가 모두 없으면 대기
+        /* API 데이터와 구조 단서가 모두 없으면 대기 */
         return false;
     }
 
     /********************************************************************
      * 이름 아래 information 표시
      ********************************************************************/
+
+    function setOptionInfoExpanded(
+        option,
+        expanded
+    ) {
+        const wrapper =
+            option.querySelector(
+                '[data-profile-info-wrap]'
+            );
+        const infoText =
+            option.querySelector(
+                '[data-profile-info]'
+            );
+
+        if (!wrapper || !infoText) {
+            return;
+        }
+
+        Object.assign(
+            infoText.style,
+            expanded
+                ? {
+                    whiteSpace: 'normal',
+                    overflow: 'visible',
+                    textOverflow: 'clip',
+                    wordBreak: 'break-word',
+                    overflowWrap: 'anywhere'
+                }
+                : {
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    wordBreak: 'normal',
+                    overflowWrap: 'normal'
+                }
+        );
+
+        wrapper.style.overflow =
+            expanded
+                ? 'visible'
+                : 'hidden';
+
+        option.style.overflow =
+            expanded
+                ? 'visible'
+                : 'hidden';
+    }
+
+    function bindOptionInfoHover(option) {
+        if (
+            typeof PAGE.matchMedia === 'function' &&
+            !PAGE.matchMedia(
+                '(hover: hover) and (pointer: fine)'
+            ).matches
+        ) {
+            return;
+        }
+
+        if (
+            option.dataset
+                .profileInfoHoverBound ===
+            'true'
+        ) {
+            return;
+        }
+
+        option.dataset.profileInfoHoverBound =
+            'true';
+
+        option.addEventListener(
+            'mouseenter',
+            () => {
+                setOptionInfoExpanded(
+                    option,
+                    true
+                );
+            }
+        );
+
+        option.addEventListener(
+            'mouseleave',
+            () => {
+                setOptionInfoExpanded(
+                    option,
+                    false
+                );
+            }
+        );
+    }
+
+    let activeProfileModal = null;
+
+    function clickProfileOption(option) {
+        if (!option) {
+            return;
+        }
+
+        option.dataset
+            .profileAllowSelection =
+            'true';
+
+        option.click();
+    }
+
+    function selectProfileFromModal(
+        sourceOption,
+        profileId,
+        profileName,
+        optionIndex,
+        combobox
+    ) {
+        if (sourceOption.isConnected) {
+            clickProfileOption(
+                sourceOption
+            );
+
+            return;
+        }
+
+        if (!combobox?.isConnected) {
+            return;
+        }
+
+        combobox.click();
+
+        let attempts = 0;
+
+        const selectWhenReady = () => {
+            attempts++;
+
+            const listboxId =
+                combobox.getAttribute(
+                    'aria-controls'
+                ) ||
+                combobox.getAttribute(
+                    'aria-owns'
+                );
+            const listbox =
+                listboxId
+                    ? document.getElementById(
+                        listboxId
+                    )
+                    : null;
+
+            if (listbox) {
+                mapProfilesToOptions(
+                    listbox
+                );
+
+                const options =
+                    getOptions(listbox);
+                let target =
+                    profileId
+                        ? options.find(
+                            option =>
+                                option.dataset
+                                    .profileId ===
+                                profileId
+                        )
+                        : null;
+
+                if (!target) {
+                    const indexedOption =
+                        options[optionIndex];
+
+                    if (
+                        indexedOption &&
+                        normalizeText(
+                            getOptionName(
+                                indexedOption
+                            )
+                        ) ===
+                        normalizeText(
+                            profileName
+                        )
+                    ) {
+                        target =
+                            indexedOption;
+                    }
+                }
+
+                if (!target && !profileId) {
+                    target =
+                        options.find(
+                            option =>
+                                normalizeText(
+                                    getOptionName(
+                                        option
+                                    )
+                                ) ===
+                                normalizeText(
+                                    profileName
+                                )
+                        );
+                }
+
+                if (target) {
+                    clickProfileOption(
+                        target
+                    );
+
+                    return;
+                }
+            }
+
+            if (attempts < 10) {
+                setTimeout(
+                    selectWhenReady,
+                    40
+                );
+            }
+        };
+
+        setTimeout(
+            selectWhenReady,
+            0
+        );
+    }
+
+    function openProfileDetailModal(option) {
+        activeProfileModal?.close();
+
+        const listbox =
+            option.closest(
+                '[role="listbox"]'
+            );
+        const combobox =
+            listbox
+                ? getControllingCombobox(
+                    listbox
+                )
+                : null;
+        const options =
+            listbox
+                ? getOptions(listbox)
+                : [];
+        const optionIndex =
+            options.indexOf(option);
+        const profileName =
+            getOptionName(option) ||
+            '이름 없는 프로필';
+        const profileId =
+            option.dataset.profileId ||
+            '';
+        const information =
+            option.dataset
+                .profileInformation ||
+            option.querySelector(
+                '[data-profile-info]'
+            )?.textContent?.trim() ||
+            '상세 정보가 없습니다.';
+
+        const overlay =
+            document.createElement('div');
+        const dialog =
+            document.createElement('div');
+        const heading =
+            document.createElement('div');
+        const name =
+            document.createElement('div');
+        const description =
+            document.createElement('div');
+        const actions =
+            document.createElement('div');
+        const cancelButton =
+            document.createElement('button');
+        const useButton =
+            document.createElement('button');
+        const headingId =
+            'profile-search-detail-title';
+
+        overlay.dataset.profileDetailModal =
+            'true';
+
+        Object.assign(
+            overlay.style,
+            {
+                position: 'fixed',
+                inset: '0',
+                zIndex: '2147483647',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '16px',
+                boxSizing: 'border-box',
+                background: 'rgba(0, 0, 0, 0.58)',
+                backdropFilter: 'blur(2px)'
+            }
+        );
+
+        dialog.setAttribute(
+            'role',
+            'dialog'
+        );
+        dialog.setAttribute(
+            'aria-modal',
+            'true'
+        );
+        dialog.setAttribute(
+            'aria-labelledby',
+            headingId
+        );
+
+        Object.assign(
+            dialog.style,
+            {
+                display: 'flex',
+                flexDirection: 'column',
+                width: 'min(420px, 100%)',
+                maxHeight: 'calc(100dvh - 32px)',
+                overflow: 'hidden',
+                boxSizing: 'border-box',
+                border: '1px solid hsl(var(--border, 0 0% 85%))',
+                borderRadius: '14px',
+                background: 'hsl(var(--background, 0 0% 100%))',
+                color: 'hsl(var(--foreground, 0 0% 10%))',
+                boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)'
+            }
+        );
+
+        heading.id =
+            headingId;
+        heading.textContent =
+            '프로필 상세정보';
+
+        Object.assign(
+            heading.style,
+            {
+                padding: '18px 20px 8px',
+                fontSize: '13px',
+                fontWeight: '600',
+                opacity: '0.6'
+            }
+        );
+
+        name.textContent =
+            profileName;
+
+        Object.assign(
+            name.style,
+            {
+                padding: '0 20px 14px',
+                fontSize: '20px',
+                lineHeight: '28px',
+                fontWeight: '700',
+                overflowWrap: 'anywhere'
+            }
+        );
+
+        description.textContent =
+            information;
+
+        Object.assign(
+            description.style,
+            {
+                flex: '1 1 auto',
+                minHeight: '0',
+                maxHeight: '55dvh',
+                overflowY: 'auto',
+                padding: '16px 20px',
+                borderTop: '1px solid hsl(var(--border, 0 0% 90%))',
+                borderBottom: '1px solid hsl(var(--border, 0 0% 90%))',
+                fontSize: '14px',
+                lineHeight: '21px',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                overflowWrap: 'anywhere'
+            }
+        );
+
+        Object.assign(
+            actions.style,
+            {
+                display: 'flex',
+                gap: '8px',
+                padding: '14px 16px 16px'
+            }
+        );
+
+        cancelButton.type =
+            'button';
+        cancelButton.textContent =
+            '취소';
+        useButton.type =
+            'button';
+        useButton.textContent =
+            '해당 프로필 사용';
+
+        for (
+            const button
+            of [cancelButton, useButton]
+        ) {
+            Object.assign(
+                button.style,
+                {
+                    minHeight: '44px',
+                    borderRadius: '9px',
+                    font: 'inherit',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer'
+                }
+            );
+        }
+
+        Object.assign(
+            cancelButton.style,
+            {
+                flex: '0 0 92px',
+                border: '1px solid hsl(var(--border, 0 0% 82%))',
+                background: 'transparent',
+                color: 'inherit'
+            }
+        );
+
+        Object.assign(
+            useButton.style,
+            {
+                flex: '1 1 auto',
+                border: '1px solid transparent',
+                background: 'hsl(var(--primary, 262 83% 58%))',
+                color: 'hsl(var(--primary-foreground, 0 0% 100%))'
+            }
+        );
+
+        actions.append(
+            cancelButton,
+            useButton
+        );
+        dialog.append(
+            heading,
+            name,
+            description,
+            actions
+        );
+        overlay.appendChild(
+            dialog
+        );
+
+        const stopModalEvent = event => {
+            event.stopPropagation();
+        };
+
+        for (
+            const eventName
+            of [
+                'pointerdown',
+                'mousedown',
+                'click'
+            ]
+        ) {
+            overlay.addEventListener(
+                eventName,
+                stopModalEvent
+            );
+        }
+
+        let closed = false;
+
+        const close = () => {
+            if (closed) {
+                return;
+            }
+
+            closed = true;
+            overlay.remove();
+            document.removeEventListener(
+                'keydown',
+                onKeyDown,
+                true
+            );
+
+            if (
+                activeProfileModal?.overlay ===
+                overlay
+            ) {
+                activeProfileModal =
+                    null;
+            }
+        };
+
+        const onKeyDown = event => {
+            if (event.key !== 'Escape') {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            close();
+        };
+
+        cancelButton.addEventListener(
+            'click',
+            event => {
+                event.preventDefault();
+                close();
+            }
+        );
+
+        useButton.addEventListener(
+            'click',
+            event => {
+                event.preventDefault();
+                close();
+
+                setTimeout(
+                    () => {
+                        selectProfileFromModal(
+                            option,
+                            profileId,
+                            profileName,
+                            optionIndex,
+                            combobox
+                        );
+                    },
+                    0
+                );
+            }
+        );
+
+        document.addEventListener(
+            'keydown',
+            onKeyDown,
+            true
+        );
+        document.body.appendChild(
+            overlay
+        );
+
+        activeProfileModal = {
+            overlay,
+            close
+        };
+    }
+
+    function bindOptionLongPress(option) {
+        if (
+            option.dataset
+                .profileLongPressBound ===
+            'true'
+        ) {
+            return;
+        }
+
+        option.dataset.profileLongPressBound =
+            'true';
+
+        let timer = null;
+        let pointerId = null;
+        let startX = 0;
+        let startY = 0;
+        let longPressTriggered = false;
+        let suppressClickUntil = 0;
+        let lastTouchStartedAt = 0;
+
+        const clearTimer = () => {
+            if (timer !== null) {
+                clearTimeout(timer);
+                timer = null;
+            }
+        };
+
+        option.addEventListener(
+            'pointerdown',
+            event => {
+                if (event.pointerType !== 'touch') {
+                    return;
+                }
+
+                clearTimer();
+
+                pointerId =
+                    event.pointerId;
+                startX =
+                    event.clientX;
+                startY =
+                    event.clientY;
+                longPressTriggered =
+                    false;
+                lastTouchStartedAt =
+                    Date.now();
+
+                timer = setTimeout(
+                    () => {
+                        timer = null;
+
+                        if (!option.isConnected) {
+                            return;
+                        }
+
+                        longPressTriggered =
+                            true;
+                        suppressClickUntil =
+                            Date.now() + 1000;
+
+                        openProfileDetailModal(
+                            option
+                        );
+                    },
+                    550
+                );
+            },
+            true
+        );
+
+        option.addEventListener(
+            'pointermove',
+            event => {
+                if (
+                    event.pointerId !== pointerId
+                ) {
+                    return;
+                }
+
+                const moved =
+                    Math.hypot(
+                        event.clientX - startX,
+                        event.clientY - startY
+                    );
+
+                if (moved > 12) {
+                    clearTimer();
+                }
+            },
+            true
+        );
+
+        option.addEventListener(
+            'pointerup',
+            event => {
+                if (
+                    event.pointerId !== pointerId
+                ) {
+                    return;
+                }
+
+                clearTimer();
+                pointerId = null;
+
+                if (!longPressTriggered) {
+                    return;
+                }
+
+                longPressTriggered =
+                    false;
+                event.preventDefault();
+                event.stopImmediatePropagation();
+            },
+            true
+        );
+
+        for (
+            const eventName
+            of ['pointercancel', 'pointerleave']
+        ) {
+            option.addEventListener(
+                eventName,
+                event => {
+                    if (
+                        event.pointerId !== pointerId
+                    ) {
+                        return;
+                    }
+
+                    clearTimer();
+                    pointerId = null;
+                },
+                true
+            );
+        }
+
+        option.addEventListener(
+            'click',
+            event => {
+                if (
+                    option.dataset
+                        .profileAllowSelection ===
+                    'true'
+                ) {
+                    delete option.dataset
+                        .profileAllowSelection;
+
+                    return;
+                }
+
+                if (
+                    Date.now() >=
+                    suppressClickUntil
+                ) {
+                    return;
+                }
+
+                event.preventDefault();
+                event.stopImmediatePropagation();
+            },
+            true
+        );
+
+        option.addEventListener(
+            'contextmenu',
+            event => {
+                if (
+                    Date.now() -
+                        lastTouchStartedAt >
+                    2000
+                ) {
+                    return;
+                }
+
+                event.preventDefault();
+                event.stopPropagation();
+            },
+            true
+        );
+    }
 
     function renderOptionInfo(
         option,
@@ -575,7 +1387,6 @@
                 normalizeText(
                     getOptionName(option)
                 );
-
             const children =
                 Array.from(
                     option.children
@@ -607,7 +1418,7 @@
             );
 
         /*
-         * 최초 1회만 이름 요소를 wrapper 안으로 이동
+         * 최초 1회만 이름 span을 wrapper 안으로 이동
          */
         if (!wrapper) {
             wrapper =
@@ -623,6 +1434,7 @@
                     flexDirection: 'column',
                     justifyContent: 'center',
                     flex: '1 1 auto',
+                    width: '100%',
                     minWidth: '0',
                     maxWidth: '100%',
                     overflow: 'hidden'
@@ -656,8 +1468,8 @@
             );
 
             /*
-             * option의 grow 스타일이
-             * 내부 span에 잘못 적용되는 경우 방지
+             * 원래 option의 "*" grow 스타일이
+             * 내부 span들에 이상하게 적용되는 경우 방지
              */
             wrapper.style.flexGrow = '1';
         }
@@ -676,6 +1488,9 @@
                     .trim()
                 : '';
 
+        /*
+         * 정보 없는 프로필
+         */
         if (!information) {
             if (infoText) {
                 infoText.remove();
@@ -695,17 +1510,23 @@
                 infoText.style,
                 {
                     display: 'block',
+
                     width: '100%',
                     minWidth: '0',
                     maxWidth: '100%',
+
                     marginTop: '0px',
+
                     fontSize: '10px',
                     lineHeight: '12px',
                     fontWeight: '400',
+
                     opacity: '0.55',
+
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
+
                     pointerEvents: 'none'
                 }
             );
@@ -718,10 +1539,24 @@
         infoText.textContent =
             information;
 
-        // 마우스를 올리면 전체 정보 표시
-        infoText.title =
-            information;
+        /*
+         * 평소에는 한 줄 말줄임,
+         * 마우스를 올리면 목록 내부에서 여러 줄로 펼침
+         */
+        infoText.removeAttribute(
+            'title'
+        );
+
+        setOptionInfoExpanded(
+            option,
+            false
+        );
+
+        bindOptionInfoHover(
+            option
+        );
     }
+
 
     /********************************************************************
      * API 프로필 ↔ DOM option 매핑
@@ -757,7 +1592,9 @@
 
         /*
          * 이름별 bucket
-         * 동일 이름이 여러 개여도 각각 매칭
+         *
+         * 동일 이름이 여러 개 있어도
+         * 각 프로필을 따로 매칭하기 위함
          */
         const profileBuckets =
             new Map();
@@ -816,7 +1653,8 @@
 
             /*
              * 1순위:
-             * API 순서와 DOM 순서가 같고 이름도 동일
+             * API 순서와 DOM 순서가 같고
+             * 이름까지 동일
              */
             const directProfile =
                 chatProfiles[index];
@@ -856,7 +1694,7 @@
 
             /*
              * 2순위:
-             * 같은 이름 중 아직 사용되지 않은 프로필
+             * 동일 이름 중 아직 사용되지 않은 프로필
              */
             if (!profile) {
                 const bucket =
@@ -895,6 +1733,7 @@
             );
         }
     }
+
 
     /********************************************************************
      * 검색 캐시 구성
@@ -943,13 +1782,23 @@
                 profile.information || '';
         }
 
+        /*
+         * 이름 아래 information 출력
+         */
         renderOptionInfo(
             option,
             profile
         );
 
+        if (profile) {
+            bindOptionLongPress(
+                option
+            );
+        }
+
         /*
-         * 이름 + information + id 검색 가능
+         * 이름 + information + id
+         * 모두 검색 가능
          */
         optionSearchCache.set(
             option,
@@ -960,6 +1809,7 @@
             )
         );
     }
+
 
     /********************************************************************
      * 검색
@@ -978,7 +1828,10 @@
             getOptions(listbox);
 
         if (!keyword) {
-            for (const option of options) {
+            for (
+                const option
+                of options
+            ) {
                 option.hidden = false;
 
                 option.style
@@ -998,7 +1851,10 @@
 
         let visibleCount = 0;
 
-        for (const option of options) {
+        for (
+            const option
+            of options
+        ) {
             let searchText =
                 optionSearchCache.get(
                     option
@@ -1049,6 +1905,7 @@
         );
     }
 
+
     /********************************************************************
      * 검색 결과 개수
      ********************************************************************/
@@ -1073,6 +1930,7 @@
                 : `${visible}/${total}`;
     }
 
+
     /********************************************************************
      * 검색 UI
      ********************************************************************/
@@ -1087,6 +1945,11 @@
             return;
         }
 
+        constrainListboxLayout(
+            listbox,
+            viewport
+        );
+
         const wrapper =
             document.createElement(
                 'div'
@@ -1099,15 +1962,20 @@
             wrapper.style,
             {
                 flex: '0 0 auto',
+                width: '100%',
+                minWidth: '0',
+                maxWidth: '100%',
+                overflow: 'hidden',
+
                 padding: '7px 8px 6px',
+
                 position: 'sticky',
                 top: '0',
                 zIndex: '20',
+
                 boxSizing: 'border-box',
-                background:
-                    'hsl(var(--popover))',
-                borderBottom:
-                    '1px solid hsl(var(--border))'
+                background: 'hsl(var(--popover))',
+                borderBottom: '1px solid hsl(var(--border))'
             }
         );
 
@@ -1121,7 +1989,14 @@
             {
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px'
+                gap: '6px',
+
+                width: '100%',
+                minWidth: '0',
+                maxWidth: '100%',
+
+                boxSizing: 'border-box',
+                overflow: 'hidden'
             }
         );
 
@@ -1131,8 +2006,10 @@
             );
 
         input.type = 'search';
+
         input.placeholder =
             '이름 · 프로필 정보 검색';
+
         input.autocomplete = 'off';
         input.spellcheck = false;
 
@@ -1144,20 +2021,22 @@
         Object.assign(
             input.style,
             {
+                // width: 100%를 사용하지 않고 남는 공간만 차지
                 flex: '1 1 auto',
                 minWidth: '0',
-                width: '100%',
+                maxWidth: '90%',
+
                 height: '32px',
                 padding: '0 10px',
                 boxSizing: 'border-box',
-                border:
-                    '1px solid hsl(var(--border))',
+
+                border: '1px solid hsl(var(--border))',
                 borderRadius: '6px',
                 outline: 'none',
-                background:
-                    'hsl(var(--background))',
-                color:
-                    'hsl(var(--foreground))',
+
+                background: 'hsl(var(--background))',
+                color: 'hsl(var(--foreground))',
+
                 font: 'inherit',
                 fontSize: '13px'
             }
@@ -1174,8 +2053,11 @@
         Object.assign(
             counter.style,
             {
-                flex: '0 0 auto',
-                minWidth: '28px',
+                flex: '0 0 32px',
+                width: '32px',
+                minWidth: '32px',
+                maxWidth: '32px',
+
                 textAlign: 'right',
                 fontSize: '10px',
                 opacity: '0.5',
@@ -1210,7 +2092,7 @@
 
         /*
          * Radix가 viewport 높이를
-         * trigger 높이로 제한하는 경우 대응
+         * trigger 높이로 제한해놓는 경우 대응
          */
         if (viewport !== listbox) {
             viewport.style.height =
@@ -1220,6 +2102,9 @@
                 'calc(var(--radix-select-content-available-height, 500px) - 48px)';
         }
 
+        /*
+         * 프로필 정보 매핑
+         */
         mapProfilesToOptions(
             listbox
         );
@@ -1235,9 +2120,11 @@
             initialCount
         );
 
-        /*
-         * 검색 입력
-         */
+
+        /****************************************************************
+         * input 이벤트
+         ****************************************************************/
+
         input.addEventListener(
             'input',
             () => {
@@ -1251,18 +2138,22 @@
             }
         );
 
-        /*
+
+        /****************************************************************
          * 키보드
-         */
+         ****************************************************************/
+
         input.addEventListener(
             'keydown',
             event => {
+
                 /*
                  * 검색어가 있는 상태에서 Esc
                  * → 검색어만 지우기
                  */
                 if (
-                    event.key === 'Escape' &&
+                    event.key ===
+                        'Escape' &&
                     input.value
                 ) {
                     event.preventDefault();
@@ -1280,10 +2171,11 @@
 
                 /*
                  * 검색어가 비어 있을 때 Esc
-                 * → Radix에 전달하여 팝업 닫기
+                 * → Radix에 전달해서 팝업 닫힘
                  */
                 if (
-                    event.key === 'Escape'
+                    event.key ===
+                    'Escape'
                 ) {
                     return;
                 }
@@ -1293,7 +2185,8 @@
                  * → 현재 검색 결과 첫 번째 선택
                  */
                 if (
-                    event.key === 'Enter'
+                    event.key ===
+                    'Enter'
                 ) {
                     const firstVisible =
                         getOptions(
@@ -1307,7 +2200,9 @@
                                     'none'
                         );
 
-                    if (firstVisible) {
+                    if (
+                        firstVisible
+                    ) {
                         event.preventDefault();
                         event.stopPropagation();
 
@@ -1325,9 +2220,11 @@
             true
         );
 
-        /*
+
+        /****************************************************************
          * 마우스 이벤트 충돌 방지
-         */
+         ****************************************************************/
+
         for (
             const eventName
             of [
@@ -1344,9 +2241,11 @@
             );
         }
 
-        /*
+
+        /****************************************************************
          * 포커스 효과
-         */
+         ****************************************************************/
+
         input.addEventListener(
             'focus',
             () => {
@@ -1363,8 +2262,9 @@
             }
         );
 
+
         /*
-         * 팝업이 열리면 바로 검색 가능
+         * 팝업 열리면 바로 검색 가능
          */
         requestAnimationFrame(
             () => {
@@ -1374,7 +2274,8 @@
                 ) {
                     try {
                         input.focus({
-                            preventScroll: true
+                            preventScroll:
+                                true
                         });
                     } catch {
                         input.focus();
@@ -1387,6 +2288,7 @@
             '프로필 검색창 추가'
         );
     }
+
 
     /********************************************************************
      * listbox 처리
@@ -1444,16 +2346,22 @@
         );
     }
 
+
     /********************************************************************
      * API 갱신 시 열린 팝업 업데이트
      ********************************************************************/
 
     function refreshActiveListboxes() {
+        /*
+         * 이미 열린 검색창 갱신
+         */
         for (
             const listbox
             of activeListboxes
         ) {
-            if (!listbox.isConnected) {
+            if (
+                !listbox.isConnected
+            ) {
                 activeListboxes.delete(
                     listbox
                 );
@@ -1479,8 +2387,9 @@
         }
 
         /*
-         * API가 늦게 들어왔거나
-         * 이전에 옵션이 없었던 목록 재검사
+         * API가 늦게 들어와서
+         * 이전에는 프로필 Select인지
+         * 판단하지 못한 팝업 재검사
          */
         document
             .querySelectorAll(
@@ -1495,8 +2404,9 @@
             );
     }
 
+
     /********************************************************************
-     * 새 DOM 검사
+     * 새 DOM만 검사
      ********************************************************************/
 
     function inspectAddedNode(
@@ -1520,8 +2430,8 @@
         }
 
         /*
-         * listbox가 먼저 생성되고 option이
-         * 나중에 추가되는 구조도 다시 검사
+         * listbox가 먼저 생기고 option이 나중에
+         * 추가되는 구조도 다시 검사한다.
          */
         const ownerListbox =
             node.closest(
@@ -1529,33 +2439,25 @@
             );
 
         if (ownerListbox) {
-            listboxes.add(
-                ownerListbox
-            );
+            listboxes.add(ownerListbox);
         }
 
         node.querySelectorAll?.(
             '[role="listbox"]'
         ).forEach(
             listbox => {
-                listboxes.add(
-                    listbox
-                );
+                listboxes.add(listbox);
             }
         );
 
-        for (
-            const listbox
-            of listboxes
-        ) {
-            attachSearch(
-                listbox
-            );
+        for (const listbox of listboxes) {
+            attachSearch(listbox);
         }
     }
 
+
     /********************************************************************
-     * 제거된 팝업 정리
+     * 제거된 popup 정리
      ********************************************************************/
 
     let cleanupQueued = false;
@@ -1575,7 +2477,9 @@
                     const listbox
                     of activeListboxes
                 ) {
-                    if (!listbox.isConnected) {
+                    if (
+                        !listbox.isConnected
+                    ) {
                         activeListboxes.delete(
                             listbox
                         );
@@ -1584,6 +2488,7 @@
             }
         );
     }
+
 
     /********************************************************************
      * MutationObserver
@@ -1596,7 +2501,7 @@
             }
 
             /*
-             * 스크립트보다 먼저 열린 목록 검사
+             * 스크립트보다 먼저 열린 popup
              */
             document
                 .querySelectorAll(
@@ -1669,6 +2574,7 @@
         }
     }
 
+
     /********************************************************************
      * 실행
      ********************************************************************/
@@ -1676,4 +2582,5 @@
     hookFetch();
     hookXHR();
     startDOMObserver();
+
 })();
