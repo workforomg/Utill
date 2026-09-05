@@ -645,12 +645,15 @@
             #${HUB_ID} .cph-hub-grid {
                 display: grid;
                 grid-template-columns: repeat(3, minmax(0, 1fr));
+                grid-auto-rows: max-content;
+                align-items: start;
                 gap: 12px;
             }
 
             #${HUB_ID} .cph-hub-card {
                 display: flex;
                 flex-direction: column;
+                align-self: start;
                 min-width: 0;
                 gap: 10px;
                 padding: 16px;
@@ -6267,4 +6270,3 @@
     startDOMObserver();
 
 })();
-
