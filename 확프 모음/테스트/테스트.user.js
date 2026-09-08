@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name         크랙 메인 UX 정리
 // @namespace    local.crack.home.ux
-// @version      0.1.0
+// @version      0.2.0
 // @description  크랙 메인의 설치 배너를 숨기고 카테고리, 프로모션, 반응형 카드 배치를 정리합니다.
 // @author       Local
 // @match        https://crack.wrtn.ai/*
-// @run-at       document-idle
+// @run-at       document-start
 // @grant        none
 // ==/UserScript==
 
@@ -57,6 +57,12 @@
   let observer = null;
   let currentPath = location.pathname;
   let openFeature = null;
+  let categoryCache = null;
+  let categoryButtons = new Map();
+  let featureCache = new Map();
+  let panelSignature = '';
+  let pendingWork = false;
+  const OWN_UI = `#${PANEL_ID}, #${DRAWER_ID}`;
 
   const css = `
     :root {
@@ -185,7 +191,7 @@
       place-items: center;
       padding: 24px;
       background: rgba(0, 0, 0, 0.72);
-      backdrop-filter: blur(6px);
+      /* A solid overlay avoids full-screen blur/compositing on older tablets. */
     }
 
     .crx-drawer-shell {
@@ -259,13 +265,19 @@
       scrollbar-width: thin;
     }
 
-    .crx-card-slide img {
-      content-visibility: auto;
+    .crx-feature-source-hidden,
+    .crx-feature-source-hidden * {
+      animation: none !important;
+      transition: none !important;
+      will-change: auto !important;
+      filter: none !important;
+      backdrop-filter: none !important;
     }
 
-    .crx-render-section {
-      content-visibility: auto;
-      contain-intrinsic-size: auto 560px;
+    /* Suppress decorative backgrounds while closed; never change img thumbnails. */
+    .crx-feature-source-hidden:not(img),
+    .crx-feature-source-hidden :not(img) {
+      background-image: none !important;
     }
 
     @media (max-width: 1024px) and (orientation: portrait) {
@@ -420,9 +432,57 @@
   `;
 
   function isHome() {
-    const isFixture = document.documentElement.dataset.crxFixture === 'true';
+    const isFixture = location.hostname === '127.0.0.1' &&
+      document.documentElement?.dataset.crxFixture === 'true';
     return isFixture || (location.hostname === 'crack.wrtn.ai' && location.pathname === HOME_PATH);
   }
+
+  // Only speculative JS links observed on Crack. Actual <script src>, preload,
+  // fetch/XHR, and every thumbnail/image request remain untouched.
+  // Install before app startup: removing a link after insertion can be too late.
+  function deferScriptPrefetch(node) {
+    if (!isHome() || !node || (node.nodeType !== 1 && node.nodeType !== 11)) return;
+    const links = node.nodeType === 1 && node.localName === 'link'
+      ? [node] : node.querySelectorAll('link[rel~="prefetch"][as="script"]');
+    for (const link of links) {
+      if (!link.relList?.contains('prefetch') || link.as !== 'script') continue;
+      let url;
+      try { url = new URL(link.getAttribute('href'), location.href); } catch { continue; }
+      if (url.hostname !== 'build-assets.static.wrtn.ai' ||
+          !url.pathname.includes('/_next/static/chunks/') || !url.pathname.endsWith('.js')) continue;
+      link.dataset.crxDeferredRel = link.getAttribute('rel');
+      link.setAttribute('rel', 'crx-deferred-prefetch');
+    }
+  }
+
+  function installPrefetchGate() {
+    const wrap = (prototype, name, positions) => {
+      const original = prototype[name];
+      if (typeof original !== 'function') return;
+      prototype[name] = function (...args) {
+        // Read-only inspection for all other insertions; no per-image walk.
+        for (const index of positions || args.keys()) {
+          const node = args[index];
+          if (node?.localName === 'link' ||
+              (this === document.head && (node?.nodeType === 11 || node?.childElementCount > 0))) {
+            deferScriptPrefetch(node);
+          }
+        }
+        return Reflect.apply(original, this, args);
+      };
+    };
+    wrap(Node.prototype, 'appendChild', [0]);
+    wrap(Node.prototype, 'insertBefore', [0]);
+    wrap(Node.prototype, 'replaceChild', [0]);
+    for (const prototype of [Element.prototype, DocumentFragment.prototype, Document.prototype]) {
+      for (const name of ['append', 'prepend', 'replaceChildren']) wrap(prototype, name);
+    }
+    wrap(Element.prototype, 'insertAdjacentElement', [1]);
+    // Best effort for late userscript startup. Already-started downloads cannot be undone.
+    deferScriptPrefetch(document.head);
+  }
+
+  installPrefetchGate();
 
   function addStyle() {
     if (document.getElementById(STYLE_ID)) return;
@@ -443,7 +503,10 @@
   }
 
   function findCategorySource() {
-    const candidates = [...document.querySelectorAll('[role="region"]')]
+    if (categoryCache?.isConnected) return categoryCache;
+    const root = document.querySelector('main') || document;
+    const candidates = [...root.querySelectorAll('[role="region"]')]
+      .filter(region => !region.closest(OWN_UI))
       .map((region) => {
         const buttons = [...region.querySelectorAll('button')];
         const score = buttons.reduce(
@@ -455,7 +518,8 @@
       .filter(({ score }) => score >= 5)
       .sort((a, b) => b.score - a.score);
 
-    return candidates[0]?.region ?? null;
+    categoryCache = candidates[0]?.region ?? null;
+    return categoryCache;
   }
 
   function isSourceButtonActive(button) {
@@ -469,11 +533,15 @@
   }
 
   function currentSourceButton(label) {
-    const source = findCategorySource();
-    if (!source) return null;
-    return [...source.querySelectorAll('button')].find((button) =>
-      exactText(button, label),
-    ) ?? null;
+    return categoryButtons.get(label) ?? null;
+  }
+
+  function indexCategories(source) {
+    categoryButtons = new Map();
+    for (const button of source?.querySelectorAll('button') || []) {
+      const label = button.textContent.trim();
+      if (ALL_CATEGORY_LABELS.has(label)) categoryButtons.set(label, button);
+    }
   }
 
   function categoryButton(label) {
@@ -487,6 +555,7 @@
       button.setAttribute('aria-current', 'page');
     }
     button.addEventListener('click', () => {
+      indexCategories(findCategorySource());
       const current = currentSourceButton(label);
       if (!current) return;
       current.click();
@@ -547,6 +616,7 @@
     panel.id = PANEL_ID;
     panel.setAttribute('aria-label', '크랙 메인 빠른 메뉴와 카테고리');
     panel.append(quickMenu(), menuLine('탐색', DISCOVERY), menuLine('장르', GENRES));
+    panelSignature = [...categoryButtons.keys()].join('|');
 
     source.parentElement?.insertBefore(panel, source);
     source.classList.add('crx-original-category-hidden');
@@ -554,6 +624,8 @@
   }
 
   function findInstallBanner() {
+    const marked = document.querySelector('.crx-install-banner-hidden');
+    if (marked) return marked;
     const textNodes = allElementsWithExactText('앱에서 더 편하게 몰입해 보세요');
     for (const textNode of textNodes) {
       let node = textNode.parentElement;
@@ -569,9 +641,10 @@
   }
 
   function findBannerSource() {
-    const control = document.querySelector(
+    const root = document.querySelector('main') || document;
+    const control = [...root.querySelectorAll(
       'button[aria-label="이전 배너"], button[aria-label="다음 배너"]',
-    );
+    )].find(element => !element.closest(OWN_UI));
     if (!control) return null;
 
     let node = control.parentElement;
@@ -589,7 +662,7 @@
 
   function findNoticeSource() {
     const link = [...document.querySelectorAll('a[href*="/announcement/"]')].find(
-      (anchor) => anchor.textContent.trim().length > 0,
+      (anchor) => !anchor.closest(OWN_UI) && anchor.textContent.trim().length > 0,
     );
     if (!link) return null;
     return link.closest('[data-wrtn-imp-id]') ?? link;
@@ -597,6 +670,7 @@
 
   function findPromotionSource() {
     const headings = [...document.querySelectorAll('p')].filter((element) => {
+      if (element.closest(OWN_UI)) return false;
       const text = element.textContent.trim();
       return text.length <= 50 && (/광고.*작품/i.test(text) || /프로모션.*작품/i.test(text));
     });
@@ -615,6 +689,7 @@
   }
 
   function findFeatureSource(kind) {
+    if (featureCache.has(kind)) return featureCache.get(kind);
     const marked = document.querySelector(`[data-crx-feature-source="${kind}"]`);
     if (marked && !marked.closest(`#${DRAWER_ID}`)) return marked;
     if (kind === 'banner') return findBannerSource();
@@ -697,6 +772,7 @@
   }
 
   function openDrawer(kind) {
+    featureCache.clear();
     const source = findFeatureSource(kind);
     if (!source) return;
 
@@ -740,7 +816,9 @@
       Object.keys(FEATURE_NAMES).map(findFeatureSource).filter(Boolean),
     );
 
-    for (const region of document.querySelectorAll('[role="region"]')) {
+    const root = document.querySelector('main') || document;
+    for (const region of root.querySelectorAll('[role="region"]')) {
+      if (region.closest(OWN_UI)) continue;
       if (region === categorySource) continue;
       if ([...featureSources].some((source) => source === region || source.contains(region))) continue;
 
@@ -754,6 +832,8 @@
 
       const track = items[0].parentElement;
       if (!track || !items.every((item) => item.parentElement === track)) continue;
+      if (region.classList.contains('crx-card-region') &&
+          items.every(item => item.classList.contains('crx-card-slide'))) continue;
 
       region.classList.add('crx-card-region');
       track.classList.add('crx-card-track');
@@ -763,23 +843,6 @@
         track.parentElement.classList.add('crx-card-viewport');
       }
 
-      const section = region.parentElement;
-      if (section && !section.closest('[data-crx-feature-source]')) {
-        section.classList.add('crx-render-section');
-      }
-    }
-  }
-
-  function optimizeImages() {
-    const viewportHeight = window.innerHeight;
-    for (const image of document.images) {
-      if (image.closest(`#${DRAWER_ID}`)) continue;
-      image.decoding = 'async';
-      const rect = image.getBoundingClientRect();
-      if (rect.top > viewportHeight * 1.25) {
-        image.loading = 'lazy';
-        image.fetchPriority = 'low';
-      }
     }
   }
 
@@ -828,37 +891,54 @@
 
   function refresh() {
     refreshTimer = 0;
+    if (document.hidden) { pendingWork = true; return; }
+    pendingWork = false;
+    observer?.disconnect();
+    try {
     if (!isHome()) {
       removeEnhancements();
       return;
     }
 
     addStyle();
+    featureCache.clear();
+    for (const kind of Object.keys(FEATURE_NAMES)) {
+      featureCache.set(kind, findFeatureSource(kind));
+    }
     findInstallBanner()?.classList.add('crx-install-banner-hidden');
     markFeatureSources();
 
     const categorySource = findCategorySource();
+    indexCategories(categorySource);
     if (categorySource) {
       const panel = document.getElementById(PANEL_ID);
-      if (!panel || !panel.isConnected) buildCategoryPanel(categorySource);
+      if (!panel || panel.parentElement !== categorySource.parentElement ||
+          panelSignature !== [...categoryButtons.keys()].join('|')) buildCategoryPanel(categorySource);
       categorySource.classList.add('crx-original-category-hidden');
     }
 
     markCardRegions();
-    optimizeImages();
     syncCategoryButtons();
     syncFeatureButtons();
+    } finally {
+      observer?.observe(document.documentElement, { childList: true, subtree: true });
+    }
   }
 
   function scheduleRefresh() {
+    pendingWork = true;
+    if (document.hidden) return;
     if (refreshTimer) return;
-    refreshTimer = window.setTimeout(refresh, 90);
+    refreshTimer = window.setTimeout(refresh, 250);
   }
 
   function watchRoute() {
     const check = () => {
       if (location.pathname === currentPath) return;
       currentPath = location.pathname;
+      categoryCache = null;
+      categoryButtons.clear();
+      featureCache.clear();
       scheduleRefresh();
     };
 
@@ -879,14 +959,30 @@
 
   function start() {
     addStyle();
-    ensureDrawer();
     watchRoute();
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') closeDrawer();
     });
-    observer = new MutationObserver(scheduleRefresh);
+    observer = new MutationObserver(records => {
+      if (!isHome()) return;
+      if (records.some(record => {
+        const target = record.target.nodeType === 1 ? record.target : record.target.parentElement;
+        if (target?.closest(`${OWN_UI}, [data-crx-feature-source]`)) return false;
+        const main = document.querySelector('main');
+        // Sidebar chat text, image loads, and our own popup do not need a page scan.
+        if (main && !main.contains(target) && !target?.contains(main)) {
+          return [...record.addedNodes].some(node => node.nodeType === 1 &&
+            (node.textContent || '').includes('앱에서 더 편하게 몰입해 보세요'));
+        }
+        return [...record.addedNodes, ...record.removedNodes].some(node =>
+          node.nodeType === 1 && !node.matches('img, svg, path') && !node.closest?.(OWN_UI));
+      })) scheduleRefresh();
+    });
     observer.observe(document.documentElement, { childList: true, subtree: true });
-    window.addEventListener('resize', scheduleRefresh, { passive: true });
+    // CSS handles orientation/resize; no full DOM or image scan on resize.
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && pendingWork) scheduleRefresh();
+    });
     refresh();
   }
 
