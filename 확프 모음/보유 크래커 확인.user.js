@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         크래커 보유량 표시
 // @namespace    https://github.com/workforomg/Utill
-// @version      1.0.0
+// @version      1.0.5
 // @author       지유지요
 // @description  API에서 보유량을 읽고 /cracker 아이콘 오른쪽에 표시합니다.
 // @match        https://crack.wrtn.ai/*
@@ -33,17 +33,9 @@
   const HOST_CLASS =
     'crack-cracker-balance-host';
 
-  /*
-   * 같은 완료 패킷이 여러 경로로 잡혔을 때
-   * 중복 차감 방지 시간
-   */
   const DEDUPE_TIME_MS =
     15_000;
 
-  /*
-   * 페이지 이동 API 요청이 너무 연속으로
-   * 발생하지 않게 하는 짧은 지연
-   */
   const PAGE_REFRESH_DELAY_MS =
     80;
 
@@ -54,17 +46,15 @@
    * =========================
    */
 
-  let currentQuantity =
-    null;
+  let currentQuantity = null;
 
-  let apiLoading =
-    false;
+  let apiLoading = false;
 
-  let apiRefreshPending =
-    false;
+  let apiRefreshPending = false;
 
-  let renderScheduled =
-    false;
+  let renderScheduled = false;
+
+  let refreshTimer = null;
 
   let lastUrl =
     location.href;
@@ -112,20 +102,21 @@
    * access_token
    * =========================
    *
-   * 중요:
+   * 토큰은:
    *
-   * - 토큰은 API 요청 직전에만 읽습니다.
-   * - localStorage 등에 복사하지 않습니다.
-   * - 전역 변수에 저장하지 않습니다.
-   * - DOM에 출력하지 않습니다.
-   * - console에도 출력하지 않습니다.
+   * - 콘솔 출력 안 함
+   * - DOM 출력 안 함
+   * - localStorage 저장 안 함
+   * - sessionStorage 저장 안 함
+   * - 전역 변수 저장 안 함
+   *
+   * API 호출 직전에만 읽어서 사용
    */
 
   function getAccessToken() {
     try {
       const cookies =
-        document.cookie
-          .split(';');
+        document.cookie.split(';');
 
       for (
         const rawCookie
@@ -152,8 +143,7 @@
             .trim();
 
         if (
-          name !==
-          'access_token'
+          name !== 'access_token'
         ) {
           continue;
         }
@@ -169,18 +159,9 @@
               value
             );
         } catch {
-          /*
-           * URL 인코딩된 값이 아니면
-           * 원본 그대로 사용
-           */
+          // 인코딩되지 않은 값이면 그대로 사용
         }
 
-        /*
-         * 쿠키 값 자체에 이미
-         * Bearer 접두사가 붙어 있는 경우 제거.
-         *
-         * API 요청할 때 한 번만 붙입니다.
-         */
         value =
           value
             .replace(
@@ -196,10 +177,7 @@
         return value;
       }
     } catch {
-      /*
-       * 토큰이나 쿠키 내용을
-       * 콘솔에 남기지 않음
-       */
+      // 토큰 관련 정보 출력하지 않음
     }
 
     return null;
@@ -231,9 +209,7 @@
 
     style.textContent = `
       /*
-       * 기존 size-10 버튼은
-       * width: 40px 형태이므로
-       * 숫자가 들어갈 만큼만 확장
+       * 상단 크래커 아이콘 버튼만 확장
        */
       a.${HOST_CLASS} {
         width: auto !important;
@@ -248,10 +224,10 @@
       }
 
       /*
-       * 크래커 아이콘 오른쪽 숫자
+       * 추가하는 보유량 숫자
        */
       a.${HOST_CLASS}
-      .${BADGE_CLASS} {
+      > .${BADGE_CLASS} {
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -290,20 +266,161 @@
 
   /*
    * =========================
+   * 우리가 수정할 상단 버튼 판별
+   * =========================
+   *
+   * 대상:
+   *
+   * <a href="/cracker">
+   *   <svg ...></svg>
+   * </a>
+   *
+   * 제외:
+   *
+   * <a href="/cracker">
+   *   <div ...>
+   *     <svg ...></svg>
+   *     <span>612,938</span>
+   *   </div>
+   * </a>
+   */
+
+  function isTargetCrackerLink(link) {
+    if (
+      !link ||
+      link.tagName !== 'A'
+    ) {
+      return false;
+    }
+
+    if (
+      link.getAttribute('href') !==
+      '/cracker'
+    ) {
+      return false;
+    }
+
+    /*
+     * 상단 아이콘은 SVG가
+     * a의 직접 자식이어야 함
+     */
+    const directSvg =
+      link.querySelector(
+        ':scope > svg'
+      );
+
+    if (!directSvg) {
+      return false;
+    }
+
+    /*
+     * div를 직접 자식으로 가진 구조는
+     * 크래커 페이지 내부 UI이므로 제외
+     */
+    if (
+      link.querySelector(
+        ':scope > div'
+      )
+    ) {
+      return false;
+    }
+
+    /*
+     * 사이트 자체 잔액 텍스트가 있으면 제외
+     */
+    if (
+      link.querySelector(
+        '.typo-text-sm_leading-none_medium'
+      )
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+
+  function getTargetCrackerLinks() {
+    return [
+      ...document.querySelectorAll(
+        'a[href="/cracker"]'
+      ),
+    ].filter(
+      isTargetCrackerLink
+    );
+  }
+
+
+  /*
+   * =========================
+   * 잘못 붙은 기존 UI 제거
+   * =========================
+   */
+
+  function cleanupInvalidBadges(
+    validLinks
+  ) {
+    document
+      .querySelectorAll(
+        `a[href="/cracker"] > .${BADGE_CLASS}`
+      )
+      .forEach(
+        badge => {
+          const link =
+            badge.parentElement;
+
+          if (
+            !validLinks.includes(link)
+          ) {
+            badge.remove();
+
+            link?.classList.remove(
+              HOST_CLASS
+            );
+          }
+        }
+      );
+
+
+    /*
+     * badge는 없는데
+     * 이전 버전이 HOST_CLASS만 남겼을 경우도 제거
+     */
+    document
+      .querySelectorAll(
+        `a.${HOST_CLASS}[href="/cracker"]`
+      )
+      .forEach(
+        link => {
+          if (
+            !validLinks.includes(link)
+          ) {
+            link.classList.remove(
+              HOST_CLASS
+            );
+          }
+        }
+      );
+  }
+
+
+  /*
+   * =========================
    * 잔액 UI
    * =========================
    */
 
   function renderBalance() {
-    renderScheduled =
-      false;
+    renderScheduled = false;
 
     injectStyle();
 
     const links =
-      document.querySelectorAll(
-        'a[href="/cracker"]'
-      );
+      getTargetCrackerLinks();
+
+    cleanupInvalidBadges(
+      links
+    );
 
     if (!links.length) {
       return;
@@ -319,7 +436,7 @@
 
       let badge =
         link.querySelector(
-          `.${BADGE_CLASS}`
+          `:scope > .${BADGE_CLASS}`
         );
 
       if (!badge) {
@@ -332,9 +449,9 @@
           BADGE_CLASS;
 
         /*
-         * 원래 SVG 뒤에 들어감
+         * SVG 바로 뒤에 추가
          *
-         * [아이콘] 12,345
+         * [크래커 아이콘] 612,938
          */
         link.appendChild(
           badge
@@ -342,31 +459,27 @@
       }
 
       if (
-        currentQuantity ===
-        null
+        currentQuantity === null
       ) {
-        badge.hidden =
-          true;
-
-        badge.textContent =
-          '';
+        badge.hidden = true;
+        badge.textContent = '';
 
         continue;
       }
 
-      badge.hidden =
-        false;
-
-      badge.textContent =
+      const formatted =
         formatNumber(
           currentQuantity
         );
 
+      badge.hidden = false;
+
+      badge.textContent =
+        formatted;
+
       badge.setAttribute(
         'aria-label',
-        `보유 크래커 ${formatNumber(
-          currentQuantity
-        )}`
+        `보유 크래커 ${formatted}`
       );
     }
   }
@@ -377,8 +490,7 @@
       return;
     }
 
-    renderScheduled =
-      true;
+    renderScheduled = true;
 
     requestAnimationFrame(
       renderBalance
@@ -425,13 +537,12 @@
     }
 
     /*
-     * 아직 최초 API 잔액을
-     * 받지 못했다면 임의로 계산하지 않고
-     * 서버 값을 가져옵니다.
+     * 아직 실제 서버 잔액을
+     * 받은 적이 없으면
+     * 임의 계산하지 않음
      */
     if (
-      currentQuantity ===
-      null
+      currentQuantity === null
     ) {
       requestQuantityRefresh();
 
@@ -441,8 +552,7 @@
     currentQuantity =
       Math.max(
         0,
-        currentQuantity -
-        amount
+        currentQuantity - amount
       );
 
     scheduleRender();
@@ -451,33 +561,27 @@
 
   /*
    * =========================
-   * 크래커 잔액 API
+   * 잔액 API
    * =========================
    */
 
   async function refreshQuantity() {
     if (apiLoading) {
-      apiRefreshPending =
-        true;
+      apiRefreshPending = true;
 
       return;
     }
 
-    apiLoading =
-      true;
+    apiLoading = true;
 
     /*
-     * API 호출할 때마다
-     * 최신 access_token을 다시 읽음.
-     *
-     * 토큰을 지속적으로 보관하지 않음.
+     * 함수 내부에서만 토큰 보관
      */
     const accessToken =
       getAccessToken();
 
     if (!accessToken) {
-      apiLoading =
-        false;
+      apiLoading = false;
 
       return;
     }
@@ -487,8 +591,7 @@
         await fetch(
           CASH_API,
           {
-            method:
-              'GET',
+            method: 'GET',
 
             credentials:
               'include',
@@ -507,8 +610,10 @@
         );
 
       /*
-       * 에러 응답 본문이나
-       * 헤더를 콘솔에 출력하지 않음.
+       * response 내용,
+       * headers,
+       * Authorization 등을
+       * console에 출력하지 않음
        */
       if (!response.ok) {
         return;
@@ -517,16 +622,6 @@
       const json =
         await response.json();
 
-      /*
-       * 예상:
-       *
-       * {
-       *   "result": "SUCCESS",
-       *   "data": {
-       *     "quantity": 12345
-       *   }
-       * }
-       */
       const quantity =
         normalizeNumber(
           json?.data?.quantity
@@ -541,24 +636,17 @@
       setQuantity(
         quantity
       );
+
     } catch {
       /*
-       * 의도적으로 아무 내용도
-       * 콘솔에 출력하지 않습니다.
-       *
-       * 특히 access_token 및
-       * Authorization 정보는
-       * 절대 기록하지 않습니다.
+       * API 오류도 console 출력 없음
        */
     } finally {
-      apiLoading =
-        false;
+      apiLoading = false;
 
-      /*
-       * API 요청 중에 추가 갱신 요청이
-       * 들어왔으면 한 번 더 실행
-       */
-      if (apiRefreshPending) {
+      if (
+        apiRefreshPending
+      ) {
         apiRefreshPending =
           false;
 
@@ -571,11 +659,10 @@
 
 
   /*
-   * 페이지 이동 등에서 여러 번 호출되어도
-   * 아주 짧게 합쳐서 한 번만 API 요청
+   * =========================
+   * API 요청 디바운스
+   * =========================
    */
-  let refreshTimer =
-    null;
 
   function requestQuantityRefresh() {
     if (refreshTimer) {
@@ -587,8 +674,7 @@
     refreshTimer =
       setTimeout(
         () => {
-          refreshTimer =
-            null;
+          refreshTimer = null;
 
           refreshQuantity();
         },
@@ -632,8 +718,7 @@
       );
 
     if (
-      stableId !==
-      undefined
+      stableId !== undefined
     ) {
       return (
         `id:${stableId}:${total}`
@@ -693,9 +778,6 @@
         total
       );
 
-    /*
-     * 오래된 기록 삭제
-     */
     for (
       const [
         savedKey,
@@ -737,7 +819,7 @@
 
   /*
    * =========================
-   * characterMessageGenerated
+   * 메시지 차감 처리
    * =========================
    */
 
@@ -746,8 +828,7 @@
   ) {
     if (
       !Array.isArray(packet) ||
-      packet[0] !==
-        TARGET_EVENT
+      packet[0] !== TARGET_EVENT
     ) {
       return;
     }
@@ -759,10 +840,6 @@
       envelope?.data ??
       envelope;
 
-    /*
-     * 메시지 생성 완료에서만
-     * 실제 사용량 반영
-     */
     if (
       !data ||
       data.status !== 'end'
@@ -797,8 +874,8 @@
     }
 
     /*
-     * 팝업이나 별도 표시 없이
-     * 상단 보유량 숫자만 즉시 차감
+     * 별도 팝업 없음.
+     * 숫자만 즉시 차감.
      */
     subtractQuantity(
       total
@@ -808,7 +885,7 @@
 
   /*
    * =========================
-   * Socket.IO 패킷 추출
+   * Socket.IO 배열 추출
    * =========================
    */
 
@@ -818,8 +895,7 @@
     const needle =
       `["${TARGET_EVENT}"`;
 
-    let searchIndex =
-      0;
+    let searchIndex = 0;
 
     while (
       searchIndex <
@@ -837,17 +913,10 @@
         break;
       }
 
-      let depth =
-        0;
-
-      let inString =
-        false;
-
-      let escaped =
-        false;
-
-      let end =
-        -1;
+      let depth = 0;
+      let inString = false;
+      let escaped = false;
+      let end = -1;
 
       for (
         let index = start;
@@ -859,18 +928,17 @@
 
         if (inString) {
           if (escaped) {
-            escaped =
-              false;
+            escaped = false;
+
           } else if (
             character === '\\'
           ) {
-            escaped =
-              true;
+            escaped = true;
+
           } else if (
             character === '"'
           ) {
-            inString =
-              false;
+            inString = false;
           }
 
           continue;
@@ -879,8 +947,7 @@
         if (
           character === '"'
         ) {
-          inString =
-            true;
+          inString = true;
 
           continue;
         }
@@ -888,15 +955,13 @@
         if (
           character === '['
         ) {
-          depth +=
-            1;
+          depth += 1;
         }
 
         if (
           character === ']'
         ) {
-          depth -=
-            1;
+          depth -= 1;
 
           if (
             depth === 0
@@ -928,9 +993,7 @@
           packet
         );
       } catch {
-        /*
-         * 불완전한 패킷 무시
-         */
+        // 불완전한 패킷 무시
       }
 
       searchIndex =
@@ -941,7 +1004,7 @@
 
   /*
    * =========================
-   * WebSocket 데이터 처리
+   * WebSocket 데이터
    * =========================
    */
 
@@ -1064,14 +1127,14 @@
 
   /*
    * =========================
-   * 페이지 이동
+   * 페이지 이동 감지
    * =========================
    */
 
   function handlePageChange() {
     /*
-     * SPA에서 다른 페이지로 이동할 때마다
-     * 서버의 실제 잔액으로 다시 동기화
+     * 페이지 이동할 때마다
+     * 서버 실제 보유량 재확인
      */
     requestQuantityRefresh();
 
@@ -1162,16 +1225,13 @@
 
 
   /*
-   * 최초 페이지 접속
+   * 최초 잔액 조회
    */
   requestQuantityRefresh();
 
 
   /*
-   * React가 헤더를 통째로 다시 만들면
-   * 크래커 숫자를 다시 삽입.
-   *
-   * URL 변경도 같이 확인.
+   * React가 헤더를 갈아끼우는 경우 대응
    */
   new MutationObserver(
     () => {
@@ -1182,11 +1242,8 @@
   ).observe(
     document.documentElement,
     {
-      childList:
-        true,
-
-      subtree:
-        true,
+      childList: true,
+      subtree: true,
     }
   );
 
@@ -1201,18 +1258,18 @@
         scheduleRender();
 
         /*
-         * document-start 시점에
-         * 쿠키가 아직 준비되지 않았던 경우도
-         * 여기서 한 번 더 조회
+         * document-start 직후
+         * 토큰 접근이 안 됐을 가능성 대비
          */
         requestQuantityRefresh();
       },
       {
-        once:
-          true,
+        once: true,
       }
     );
+
   } else {
     scheduleRender();
   }
+
 })();
