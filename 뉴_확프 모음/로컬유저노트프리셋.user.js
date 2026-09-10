@@ -2,6 +2,8 @@
 // @name         로컬 유저노트 프리셋
 // @namespace    https://github.com/workforomg/Utill
 // @version      1.0.0
+// @updateURL    https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/%EB%A1%9C%EC%BB%AC%EC%9C%A0%EC%A0%80%EB%85%B8%ED%8A%B8%ED%94%84%EB%A6%AC%EC%85%8B.user.js
+// @downloadURL  https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/%EB%A1%9C%EC%BB%AC%EC%9C%A0%EC%A0%80%EB%85%B8%ED%8A%B8%ED%94%84%EB%A6%AC%EC%85%8B.user.js
 // @author       지유지요
 // @description  로컬 유저노트 프리셋을 추가합니다.
 // @match        https://crack.wrtn.ai/*
