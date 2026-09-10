@@ -22,6 +22,39 @@ const MARK = 'data-local-note-presets';
 const NAMESPACE = 'crack-local-usernote-presets-v1';
 const SCOPE = 'all';
 
+// Read the site's extension switch, excluding this panel and other add-ons.
+function readNoteExtension(dialog) {
+  const switches = [...dialog.querySelectorAll('[role="switch"],input[type="checkbox"]')]
+    .filter(el => !el.closest(`[${MARK}],[hidden],[aria-hidden="true"]`) && !el.id.startsWith('script-'));
+  const labelled = switches.filter(el => {
+    const doc = el.ownerDocument;
+    const label = [el.getAttribute('aria-label'),
+      ...(el.getAttribute('aria-labelledby') || '').split(/\s+/).map(id => doc.getElementById(id)?.textContent),
+      ...[...(el.labels || [])].map(label => label.textContent),
+      el.parentElement?.textContent].filter(Boolean).join(' ');
+    return /확장|2[,.]?000\s*자/.test(label);
+  });
+  const candidates = labelled.length ? labelled : switches;
+  if (candidates.length !== 1) return null;
+  const el = candidates[0], aria = el.getAttribute('aria-checked'), state = el.getAttribute('data-state');
+  if (aria === 'true' || aria === 'false') return aria === 'true';
+  if (state === 'checked' || state === 'unchecked') return state === 'checked';
+  if (el.matches('input[type="checkbox"]')) return el.indeterminate ? null : el.checked;
+  return null;
+}
+
+function extensionLabel(isExtend) {
+  return isExtend === true ? '2,000자 확장' : isExtend === false ? '기본 500자' : '확장 여부 미확인';
+}
+
+function noteLimit(dialog, editor) {
+  const extended = readNoteExtension(dialog);
+  const modeLimit = extended === true ? 2000 : extended === false ? 500 : null;
+  const inputLimit = editor.maxLength >= 0 ? editor.maxLength : null;
+  if (modeLimit === null) return inputLimit;
+  return inputLimit === null ? modeLimit : Math.min(modeLimit, inputLimit);
+}
+
 /** Resolve only the site's user-note dialog; never select our preset editor. */
 function findUserNoteEditor(doc) {
   for (const dialog of doc.querySelectorAll('[role="dialog"],dialog[open]')) {
@@ -50,8 +83,8 @@ function installUserNotePresets({ doc = document, storage = doc.defaultView.loca
   const noteKey = (scope, name) => notePrefix(scope) + encodeURIComponent(name);
   const notebook = {
     get: (scope, name) => JSON.parse(storage.getItem(noteKey(scope, name)) ?? 'null'),
-    save(scope, name, content) {
-      storage.setItem(noteKey(scope, name), JSON.stringify({ contentId: scope, name, content, updatedAt: new Date().toISOString() }));
+    save(scope, name, content, isExtend) {
+      storage.setItem(noteKey(scope, name), JSON.stringify({ contentId: scope, name, content, isExtend, updatedAt: new Date().toISOString() }));
     },
     remove: (scope, name) => storage.removeItem(noteKey(scope, name)),
     list(scope) {
@@ -75,9 +108,12 @@ function installUserNotePresets({ doc = document, storage = doc.defaultView.loca
     [${MARK}] button[aria-pressed="true"] {background:#6757d522;border-color:#8d7fe7;}
     [${MARK}] .ln-list {display:flex;flex-direction:column;gap:5px;overflow:auto;min-height:65px;max-height:160px;flex-shrink:0;}
     [${MARK}] .ln-list button {text-align:left;overflow-wrap:anywhere;}
+    [${MARK}] .ln-badge {display:block;width:fit-content;margin-top:4px;padding:1px 6px;border-radius:4px;background:#8882;font-size:11px;}
     [${MARK}] .ln-row {display:flex;gap:6px;flex-wrap:wrap;}
     [${MARK}] .ln-footer {margin-top:auto;padding-top:12px;border-top:1px solid #8884;display:flex;flex-direction:column;gap:8px;}
     [${MARK}] .ln-hint {font-size:12px;opacity:.75;}
+    [${MARK}] .ln-capacity {font-size:12px;white-space:pre-line;}
+    [${MARK}] .ln-capacity[data-insufficient="true"] {color:#b45309;background:#f59e0b18;border:1px solid #f59e0b66;border-radius:6px;padding:8px;}
     [${MARK}] [role="status"] {font-size:12px;overflow-wrap:anywhere;}
     [${MARK}] :focus-visible {outline:2px solid #8d7fe7;outline-offset:2px;}
     @media(max-width:760px) {
@@ -93,6 +129,35 @@ function installUserNotePresets({ doc = document, storage = doc.defaultView.loca
     let selected = null, previous = null;
     const node = (tag, text, className) => { const el = doc.createElement(tag); if (text) el.textContent = text; if (className) el.className = className; return el; };
     const status = node('p'); status.setAttribute('role', 'status');
+    const extensionStatus = node('p', null, 'ln-hint');
+    const capacity = node('p', null, 'ln-capacity');
+    capacity.setAttribute('aria-live', 'polite');
+    capacity.setAttribute('aria-label', '유저노트 남은 글자 수');
+    function updateCapacity() {
+      const limit = noteLimit(dialog, editor);
+      let message, insufficient = false;
+      if (limit === null) {
+        message = '글자 수 제한을 확인할 수 없습니다. 유저노트 확장 설정을 확인하세요.';
+      } else {
+        const remaining = Math.max(0, limit - editor.value.length);
+        const next = mergeUserNote(editor.value, content.value, 'append');
+        const required = next.length - editor.value.length;
+        insufficient = Boolean(content.value) && next.length > limit;
+        message = insufficient
+          ? `남은 글자 수가 부족합니다. ${remaining}자 남음 · 붙여넣기 ${required}자 필요 (줄바꿈 포함)\n${next.length - limit}자를 줄여야 붙여넣을 수 있습니다.`
+          : `${remaining}자 남음 / ${limit}자 · 붙여넣기 ${required}자 (줄바꿈 포함)`;
+        if (content.value.length > limit) message += `\n전체 덮어쓰기도 ${content.value.length - limit}자 초과합니다.`;
+      }
+      if (capacity.textContent !== message) capacity.textContent = message;
+      const flag = String(insufficient);
+      if (capacity.getAttribute('data-insufficient') !== flag) capacity.setAttribute('data-insufficient', flag);
+    }
+    extensionStatus.setAttribute('aria-live', 'polite');
+    const updateExtension = () => {
+      const label = `저장 시 기록할 설정: ${extensionLabel(readNoteExtension(dialog))}`;
+      if (extensionStatus.textContent !== label) extensionStatus.textContent = label;
+      updateCapacity();
+    };
     const input = (tag, label) => { const el = node(tag); el.setAttribute('aria-label', label); el.placeholder = label; return el; };
     const search = input('input', '프리셋 검색'); search.type = 'search';
     const list = node('div', null, 'ln-list'); list.setAttribute('aria-label', '저장된 프리셋 목록');
@@ -107,10 +172,15 @@ function installUserNotePresets({ doc = document, storage = doc.defaultView.loca
       list.replaceChildren();
       for (const note of items) {
         const el = button(note.name, () => { if (!leave()) return; selected = note.name; name.value = note.name; content.value = note.content; status.textContent = ''; refresh(); });
+        el.setAttribute('aria-label', note.name);
+        const badge = node('span', extensionLabel(note.isExtend), 'ln-badge');
+        badge.title = '프리셋 저장 당시 유저노트 확장 설정';
+        el.append(badge);
         el.setAttribute('aria-pressed', String(selected === note.name)); list.append(el);
       }
       if (!items.length) list.append(node('p', search.value ? '검색 결과가 없습니다.' : '저장된 프리셋이 없습니다. 아래에서 만들어 보세요.', 'ln-hint'));
       remove.disabled = !selected;
+      updateCapacity();
     }
     const fresh = button('새 프리셋', () => { if (!leave()) return; selected = null; name.value = ''; content.value = ''; refresh(); name.focus(); });
     const capture = button('현재 노트 가져오기', () => { if (!leave()) return; selected = null; name.value = ''; content.value = editor.value; refresh(); name.focus(); });
@@ -119,7 +189,7 @@ function installUserNotePresets({ doc = document, storage = doc.defaultView.loca
       if (!title) throw new Error('프리셋 이름을 입력하세요.');
       if (!content.value.trim()) throw new Error('프리셋 내용을 입력하세요.');
       if (title !== selected && notebook.get(SCOPE, title) && !win.confirm('같은 이름의 프리셋이 있습니다. 교체할까요?')) return;
-      notebook.save(SCOPE, title, content.value);
+      notebook.save(SCOPE, title, content.value, readNoteExtension(dialog));
       if (selected && selected !== title) notebook.remove(SCOPE, selected);
       selected = title; name.value = title; search.value = ''; refresh(); status.textContent = '이 브라우저에 저장했습니다.';
     });
@@ -127,7 +197,8 @@ function installUserNotePresets({ doc = document, storage = doc.defaultView.loca
     function apply(mode) {
       if (!editor.isConnected || editor.readOnly || editor.disabled) throw new Error('유저노트 편집창을 다시 열어주세요.');
       if (!content.value.trim()) throw new Error('적용할 프리셋 내용을 입력하거나 목록에서 선택하세요.');
-      const next = mergeUserNote(editor.value, content.value, mode, editor.maxLength);
+      updateCapacity();
+      const next = mergeUserNote(editor.value, content.value, mode, noteLimit(dialog, editor) ?? -1);
       if (mode === 'replace' && editor.value && !win.confirm('현재 유저노트 전체를 이 프리셋으로 덮어쓸까요?')) return;
       const before = editor.value;
       setPrompt(next, editor);
@@ -144,19 +215,23 @@ function installUserNotePresets({ doc = document, storage = doc.defaultView.loca
     }); undo.disabled = true;
     const row = (...els) => { const el = node('div', null, 'ln-row'); el.append(...els); return el; };
     const footer = node('div', null, 'ln-footer');
-    footer.append(node('p', '붙여넣기는 기존 내용 끝에 추가합니다.', 'ln-hint'), row(append, replace), undo, node('p', '적용 후 기존 수정/저장 버튼을 눌러주세요.', 'ln-hint'), status);
-    panel.append(node('h3', '유저노트 프리셋'), node('p', '이 브라우저에 저장 · 모든 작품에서 사용', 'ln-hint'), search, list, row(fresh, capture), name, content, row(save, remove), footer);
+    footer.append(node('p', '붙여넣기는 기존 내용 끝에 추가합니다.', 'ln-hint'), capacity, row(append, replace), undo, node('p', '적용 후 기존 수정/저장 버튼을 눌러주세요.', 'ln-hint'), status);
+    panel.append(node('h3', '유저노트 프리셋'), node('p', '이 브라우저에 저장 · 모든 작품에서 사용', 'ln-hint'), search, list, row(fresh, capture), name, content, extensionStatus, row(save, remove), footer);
+    updateExtension();
+    dialog.addEventListener('change', updateExtension);
+    dialog.addEventListener('input', updateCapacity);
     search.addEventListener('input', () => { try { refresh(); } catch (error) { status.textContent = error.message; } });
     const sync = event => { if (event.storageArea === storage && (event.key === null || event.key.startsWith(`${NAMESPACE}:`))) { try { refresh(); status.textContent = '다른 탭에서 목록이 변경되었습니다. 편집 중인 내용은 유지했습니다.'; } catch (error) { status.textContent = error.message; } } };
     win.addEventListener('storage', sync);
     dialog.append(panel);
     try { refresh(); } catch { status.textContent = '로컬 저장소를 읽을 수 없습니다. 브라우저 저장소 설정을 확인하세요.'; }
-    return { dialog, editor, panel, dispose() { win.removeEventListener('storage', sync); panel.remove(); dialog.removeAttribute('data-local-note-layout'); } };
+    return { dialog, editor, panel, updateExtension, dispose() { dialog.removeEventListener('input', updateCapacity); dialog.removeEventListener('change', updateExtension); win.removeEventListener('storage', sync); panel.remove(); dialog.removeAttribute('data-local-note-layout'); } };
   }
   const stop = watchDOM(() => {
     const target = findUserNoteEditor(doc);
     if (mounted && (mounted.dialog !== target?.dialog || mounted.editor !== target?.editor || !mounted.panel.isConnected)) { mounted.dispose(); mounted = null; }
     if (target && !mounted) mounted = mount(target.dialog, target.editor);
+    mounted?.updateExtension();
   }, { root: doc });
   return () => { stop(); mounted?.dispose(); style.remove(); };
 }
