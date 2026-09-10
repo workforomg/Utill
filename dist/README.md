@@ -13,10 +13,10 @@
 
 ### 1. 필요한 파일 가져오기
 
-소스를 사용하는 경우 아래 구조를 유지해 프로젝트에 복사합니다. API만 필요하면 `src/core/`, 화면 연결만 필요하면 `src/ui/`를 가져오면 됩니다.
+소스를 사용하는 경우 아래 구조를 유지해 프로젝트에 복사합니다. API만 필요하면 `dist/core/`, 화면 연결만 필요하면 `dist/ui/`를 가져오면 됩니다.
 
 ```text
-src/
+dist/
   index.js             # Core 진입점
   core/
     index.js
@@ -39,7 +39,7 @@ src/
 ### 2. ES 모듈로 사용하기
 
 ```js
-import {createCrackAPI, createCommunityAPI} from './src/core/index.js';
+import {createCrackAPI, createCommunityAPI} from './dist/core/index.js';
 
 const api = createCrackAPI();
 const community = createCommunityAPI();
@@ -57,7 +57,7 @@ const announcements = await community.announcements({
 빌드 없이 사용할 때는 필요한 `dist` 파일을 복사해 로드합니다.
 
 ```html
-<script src="./dist/index.js"></script>
+<script dist="./dist/index.js"></script>
 <script>
   const api = Crack.createCrackAPI();
 </script>
@@ -110,7 +110,7 @@ API 래퍼는 응답에 `data` 필드가 있으면 해당 값을 반환하고, �
 ### 검색과 프로필 조회
 
 ```js
-import {createDiscoveryAPI, createProfilesAPI} from './src/core/index.js';
+import {createDiscoveryAPI, createProfilesAPI} from './dist/core/index.js';
 
 const discovery = createDiscoveryAPI();
 const profiles = createProfilesAPI();
@@ -148,7 +148,7 @@ console.log(requestInfo.method, requestInfo.path);
 기존 채팅 API는 `함수(id, options)`처럼 위치 인수를 사용합니다.
 
 ```js
-import {createCrackAPI} from './src/core/index.js';
+import {createCrackAPI} from './dist/core/index.js';
 const api = createCrackAPI();
 
 const chat = await api.chat.get('CHAT_ID');
@@ -194,7 +194,7 @@ try {
 ### 채팅 소켓
 
 ```js
-import {createChatSession} from './src/core/index.js';
+import {createChatSession} from './dist/core/index.js';
 
 const session = createChatSession({chatId: 'CHAT_ID', kind: 'story'});
 const unsubscribe = session.on('characterMessageGenerated', event => {
@@ -218,7 +218,7 @@ session.close();
 UI 모듈은 페이지의 버튼·입력창·컨테이너를 의미 있는 키로 찾습니다. 이 모듈에는 DOM 연결과 SDK용 패널 삽입 도구가 포함되며, 자체 서버 API는 없습니다.
 
 ```js
-import {createPageUI} from './src/ui/index.js';
+import {createPageUI} from './dist/ui/index.js';
 
 const ui = createPageUI();
 const report = ui.inspect('search.input');
@@ -254,13 +254,13 @@ stopWatching();
 
 | 문제가 생긴 부분 | 확인할 파일 |
 |---|---|
-| 인증·HTTP·페이지 순회·소켓 연결 | `src/core/http.js` |
-| 채팅·메시지·메모리·서버 유저노트 | `src/core/api.js` |
-| 검색·프로필·공지·목록 경로 | `src/core/`의 해당 기능 파일 |
-| 요청 인수 검사·경로 변수 처리 | `src/core/endpoints.js` |
-| 페이지 버튼·컨테이너 선택자 | `src/ui/uiMap.js` |
-| 요소 탐색·중복 판정·클릭 제한 | `src/ui/uiAdapter.js` |
-| 입력창·DOM·패널 도구 | `src/ui/ui.js` |
+| 인증·HTTP·페이지 순회·소켓 연결 | `dist/core/http.js` |
+| 채팅·메시지·메모리·서버 유저노트 | `dist/core/api.js` |
+| 검색·프로필·공지·목록 경로 | `dist/core/`의 해당 기능 파일 |
+| 요청 인수 검사·경로 변수 처리 | `dist/core/endpoints.js` |
+| 페이지 버튼·컨테이너 선택자 | `dist/ui/uiMap.js` |
+| 요소 탐색·중복 판정·클릭 제한 | `dist/ui/uiAdapter.js` |
+| 입력창·DOM·패널 도구 | `dist/ui/ui.js` |
 
 ## 확인 범위
 
