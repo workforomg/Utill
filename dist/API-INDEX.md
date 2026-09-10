@@ -1,0 +1,60 @@
+# 신규 호출 함수 목록
+
+모든 함수: `api.name({경로ID, query, body}, {signal})`. `query`/`body`는 필요한 경우만 전달합니다.
+
+| 모듈 | 함수 | 메서드 | 경로 | 근거 |
+|---|---|---|---|---|
+| discovery | `search` | GET | `/crack-page/search` | observed-http-status |
+| discovery | `sortFilters` | GET | `/crack-page/search/sort-filters` | observed-http-status |
+| discovery | `contents` | GET | `/crack-api/content/search` | observed-http-status |
+| discovery | `tags` | GET | `/crack-api/content/search/tag` | observed-http-status |
+| discovery | `series` | GET | `/crack-api/story-series/search` | observed-http-status |
+| discovery | `profiles` | GET | `/crack-api/profiles/search` | loaded-source-only |
+| discovery | `keywordRanking` | GET | `/crack-api/keyword/ranking` | observed-http-status |
+| discovery | `recentKeywords` | GET | `/crack-api/keyword/recent` | observed-http-status |
+| discovery | `genreNavigations` | GET | `/crack-page/genre-navigations/web` | observed-http-status |
+| discovery | `page` | GET | `/crack-page/pages/:pageId/web` | observed-http-status |
+| profiles | `me` | GET | `/crack-api/profiles` | observed-http-status |
+| profiles | `get` | GET | `/crack-api/profiles/:userId` | observed-http-status |
+| profiles | `defaultImage` | GET | `/crack-api/profiles/profile-image` | loaded-source-only |
+| profiles | `onboardingStatus` | GET | `/crack-api/profiles/onboarding/check` | loaded-source-only |
+| profiles | `shareURL` | GET | `/crack-api/profiles/:profileId/share-url` | loaded-source-only |
+| profiles | `agreements` | GET | `/crack-api/profiles/:profileId/agreements` | loaded-source-only |
+| profiles | `followers` | GET | `/crack-api/profiles/:profileId/followers` | observed-http-status |
+| profiles | `followings` | GET | `/crack-api/profiles/:profileId/followings` | loaded-source-only |
+| profiles | `followingStatus` | GET | `/crack-api/profiles/:profileId/following-status` | loaded-source-only |
+| profiles | `chatProfiles` | GET | `/crack-api/profiles/:profileId/chat-profiles` | loaded-source-only |
+| profiles | `update` | PATCH | `/crack-api/profiles/:userId` | loaded-source-only |
+| profiles | `updateUISettings` | PATCH | `/crack-api/profiles/ui-setting` | loaded-source-only |
+| profiles | `validate` | POST | `/crack-api/profiles/validate-inputs` | loaded-source-only |
+| profiles | `follow` | POST | `/crack-api/profiles/:profileId/follow` | loaded-source-only |
+| profiles | `unfollow` | DELETE | `/crack-api/profiles/:profileId/follow` | loaded-source-only |
+| profiles | `updateFollowNotifications` | PATCH | `/crack-api/profiles/:profileId/follow` | loaded-source-only |
+| profiles | `createChatProfile` | POST | `/crack-api/profiles/:profileId/chat-profiles` | loaded-source-only |
+| profiles | `updateChatProfile` | PATCH | `/crack-api/profiles/:profileId/chat-profiles/:chatProfileId` | loaded-source-only |
+| profiles | `deleteChatProfile` | DELETE | `/crack-api/profiles/:profileId/chat-profiles/:chatProfileId` | loaded-source-only |
+| profiles | `personalizedPages` | GET | `/crack-api/pages/me` | observed-http-status |
+| profiles | `updatePersonalizedPages` | PUT | `/crack-api/pages` | loaded-source-only |
+| profiles | `badges` | GET | `/crack-api/assignments` | observed-http-status |
+| profiles | `badge` | GET | `/crack-api/assignments/:assignmentId` | loaded-source-only |
+| profiles | `blocks` | GET | `/crack-api/block` | observed-http-status |
+| community | `announcements` | GET | `/crack-api/announcements` | observed-http-status |
+| community | `announcementIndicator` | GET | `/crack-api/announcements/noti` | observed-http-status |
+| community | `notifications` | GET | `/crack-api/alarm` | observed-http-status |
+| community | `notificationIndicator` | GET | `/crack-api/alarm/check` | observed-http-status |
+| community | `feeds` | GET | `/crack-api/feeds` | observed-http-status |
+| community | `feed` | GET | `/crack-api/feeds/:feedId` | loaded-source-only |
+| community | `comments` | GET | `/crack-api/feeds/:feedId/comments` | loaded-source-only |
+| community | `pinnedComments` | GET | `/crack-api/feeds/:feedId/comments/pinned` | loaded-source-only |
+| library | `subscribedSeries` | GET | `/crack-api/story-series/me/subscribed` | loaded-source-only |
+| library | `selectableStories` | GET | `/crack-api/story-series/me/selectable-stories` | loaded-source-only |
+| library | `ownContent` | GET | `/crack-api/content/me` | observed-http-status |
+| library | `likedStories` | GET | `/crack-api/stories/me/liked` | observed-http-status |
+| library | `collections` | GET | `/crack-api/content-collections` | observed-http-status |
+| library | `stories` | GET | `/crack-api/stories` | observed-http-status |
+| library | `characters` | GET | `/crack-api/characters` | observed-http-status |
+| library | `storyRanking` | GET | `/crack-api/stories/ranking` | observed-http-status |
+| library | `temporaryStories` | GET | `/crack-api/temp-stories` | observed-http-status |
+| library | `chatFolders` | GET | `/crack-gen/chat-folders` | observed-http-status |
+| library | `storyChats` | GET | `/crack-gen/v3/chats` | observed-http-status |
+| library | `characterChats` | GET | `/crack-gen/character-chats` | observed-http-status |
