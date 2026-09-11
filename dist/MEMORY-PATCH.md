@@ -53,15 +53,3 @@ const page = await api.memory.list(chatId, {type: 'shortTerm', limit: 20});
 
 **기존 `setShortTerm(chatId, summary)`는 이번 기능과 다릅니다.** 이는 `PUT /summaries`에 `{summary}`를 전달하는 이전 전체 요약 교체 요청입니다. 호환성을 위해 유지했으며 새 개별 기억 편집에는 `updateShortTerm()`을 사용하세요.
 
-## 근거와 검증 범위
-
-- `480-62a8260e24e6d43c.js`: 목록·개별 PATCH/DELETE·이전 PUT 요청 선언. PATCH는 title이 undefined이면 전송하지 않습니다.
-- `%5B%5B...chatId%5D%5D-6521a54b7b8aff04.js`: 종류별 편집 폼, 길이 제한, 목표 제목/삭제 제외, `isSummaryFreeEditable` 검사, 403 처리, 수정 안내.
-- `_app-f0592e45b5f56e17.js`: characterChat 클라이언트의 `/crack-gen` 접두어.
-- 위 파일은 실제 로드된 소스를 브라우저에서 읽어 확인했습니다. 개인 메모리 본문을 배포 자료에 넣지 않았습니다.
-- 자동 테스트 59개 통과. 새 요청의 경로·본문·문자수 경계·상태 변화·403 전달·기존 PUT 보존을 검사했습니다.
-- 실제 메모리 수정/삭제, 채팅 전송, 유료 생성은 실행하지 않았습니다. 서버 저장 성공을 실측한 결과는 아닙니다.
-
-## GitHub 반영
-
-기존 배포 파일 중 변경된 JavaScript는 `dist/index.js`입니다. 이 문서와 갱신된 README/API-INDEX도 함께 올리면 됩니다. 다른 기능별 번들과 UI 번들의 동작은 변경하지 않았습니다.
