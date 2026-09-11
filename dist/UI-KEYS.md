@@ -1,5 +1,9 @@
 # UI 의미 키 목록
 
+`ui.js`를 로드한 뒤 `const ui = CrackUI.createPageUI()`로 사용합니다. `ui.inspect(key)`로 확인하고, `ui.configure(key, definition)`으로 탐색 규칙을 교체할 수 있습니다. 2.1.0의 요약메모리 변경은 API 업데이트이며 이 UI 키 목록은 변경하지 않았습니다.
+
+[사용법](README.md#ui-사용하기) · [요약메모리 API](MEMORY-PATCH.md)
+
 실제 사이트의 전체 DOM을 확정한 목록이 아니라 관찰한 기능과 대체 구조를 등록한 목록입니다. 사용 시 inspect/health로 일치 여부를 확인하세요.
 
 | 키 | 종류 | 범위 | 효과 |

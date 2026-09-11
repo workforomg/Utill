@@ -3,76 +3,70 @@
 크랙 웹 기능을 JavaScript 프로젝트나 브라우저 확장 기능에서 사용할 수 있도록 정리한 비공식 SDK입니다. 크랙 API를 호출하는 **Core**와 페이지 요소를 찾고 조작하는 **UI**를 각각 독립적으로 사용할 수 있습니다.
 
 - 외부 런타임 패키지와 CDN 의존성이 없습니다.
-- ES 모듈과 빌드된 브라우저용 JavaScript 파일을 제공합니다.
+- 이 폴더는 브라우저용 독립 번들을 제공합니다. 각 파일은 일반 스크립트로 로드합니다.
 - API 객체 생성이나 파일 로드만으로 요청·채팅 전송을 시작하지 않습니다.
 - 기능별 파일에 경로와 UI 탐색 규칙을 모아 사이트 변경에 대응합니다.
 
-버전: **2.0.0** · 사이트 확인 기준: **2026-09-10**
+버전: **2.1.0** · 사이트 확인 기준: **2026-09-11**
+
+## 2.1.0 업데이트
+
+단기 기억·관계도·목표의 개별 수정, 단기 기억·관계도 삭제, 수정 가능 상태 조회를 지원합니다. 요약 갱신 후 다음 메시지로 진행하기 전까지만 수정할 수 있습니다. [호출 방법과 정확한 패치 내용](MEMORY-PATCH.md)을 확인하세요.
 
 ## 시작하기
 
-### 1. 필요한 파일 가져오기
-
-소스를 사용하는 경우 아래 구조를 유지해 프로젝트에 복사합니다. API만 필요하면 `dist/core/`, 화면 연결만 필요하면 `dist/ui/`를 가져오면 됩니다.
-
-```text
-dist/
-  index.js             # Core 진입점
-  core/
-    index.js
-    http.js            # HTTP·소켓 통신
-    api.js             # 채팅·작품·서버 유저노트
-    endpoints.js       # 요청 정의 공통 처리
-    discovery.js       # 검색·탐색
-    profiles.js        # 프로필·설정
-    community.js       # 공지·알림·피드 조회
-    library.js         # 작품·채팅 목록
-  ui/
-    index.js
-    ui.js              # DOM·입력창·패널 도구
-    uiMap.js           # 페이지 요소 탐색 규칙
-    uiAdapter.js       # 요소 탐색·검사·변경 감시
-```
-
-`core`와 `ui`는 서로를 import하지 않습니다. 각 폴더 내부에서 필요한 파일만 참조합니다.
-
-### 2. ES 모듈로 사용하기
-
-```js
-import {createCrackAPI, createCommunityAPI} from './dist/core/index.js';
-
-const api = createCrackAPI();
-const community = createCommunityAPI();
-
-// 호출 시 서버에 조회 요청을 보냅니다.
-const announcements = await community.announcements({
-  query: {page: 1, limit: 20},
-});
-```
-
-브라우저에서는 `<script type="module">` 또는 프로젝트의 모듈 로더를 사용합니다. 소스를 HTTP(S)로 제공하고 위 상대 경로를 프로젝트 위치에 맞게 조정하세요.
-
-### 3. 일반 스크립트로 사용하기
-
-빌드 없이 사용할 때는 필요한 `dist` 파일을 복사해 로드합니다.
-
-```html
-<script dist="./dist/index.js"></script>
-<script>
-  const api = Crack.createCrackAPI();
-</script>
-```
+필요한 파일만 로드하세요. `index.js`는 API 전체를 포함하고, `ui.js`는 별도 화면 도구입니다. 기능별 API 번들을 사용하면 `index.js`를 함께 로드할 필요가 없습니다.
 
 | 파일 | 전역 객체 | 용도 |
 |---|---|---|
-| `dist/index.js` | `Crack` | Core 전체 |
-| `dist/ui.js` | `CrackUI` | UI 도구 전체 |
-| `dist/discovery.js` | `CrackDiscovery` | 검색·탐색 |
-| `dist/profiles.js` | `CrackProfiles` | 프로필·설정 |
-| `dist/community.js` | `CrackCommunity` | 공지·알림·피드 조회 |
-| `dist/library.js` | `CrackLibrary` | 작품·채팅 목록 |
+| [index.js](index.js) | `Crack` | Core API 전체 |
+| [ui.js](ui.js) | `CrackUI` | UI 탐색·연결 도구 |
+| [discovery.js](discovery.js) | `CrackDiscovery` | 검색·탐색 |
+| [profiles.js](profiles.js) | `CrackProfiles` | 프로필·설정 |
+| [community.js](community.js) | `CrackCommunity` | 공지·알림·피드 조회 |
+| [library.js](library.js) | `CrackLibrary` | 작품·채팅 목록 |
 
-각 번들은 단독으로 로드할 수 있습니다. 예를 들어 공지만 조회하려면 `community.js`를 로드한 뒤 `CrackCommunity.createCommunityAPI()`를 사용합니다.
+### 프로젝트에서 로드
+
+파일을 프로젝트의 `dist/`에 복사한 경우:
+
+```html
+<script src="./dist/index.js"></script>
+<script src="./dist/ui.js"></script>
+<script>
+  const api = Crack.createCrackAPI();
+  const ui = CrackUI.createPageUI();
+</script>
+```
+
+이 파일들은 named export를 제공하는 ES 모듈이 아닙니다. `import {createCrackAPI} from './dist/index.js'`처럼 사용하지 마세요. `core/`, `ui/` 하위 소스 폴더도 이 배포본에는 없습니다.
+
+### Tampermonkey에서 로드
+
+유저스크립트 헤더의 `@require`에 GitHub Raw 주소를 넣습니다. 아래 코드는 API 객체만 생성하며 서버 요청은 하지 않습니다.
+
+```js
+// ==UserScript==
+// @name         SDK 사용 예제
+// @namespace    https://github.com/workforomg/Utill
+// @version      1.0.0
+// @match        https://crack.wrtn.ai/*
+// @require      https://raw.githubusercontent.com/workforomg/Utill/main/dist/index.js
+// @grant        none
+// @run-at       document-idle
+// ==/UserScript==
+
+(() => {
+  const api = Crack.createCrackAPI();
+  // 사용자가 누르는 버튼 등에 API 호출을 연결하세요.
+})();
+```
+
+UI가 필요하면 `ui.js`의 Raw 주소도 `@require`로 추가합니다. 파일명에서 접두사만 제거했으므로 전역 이름은 `Crack`, `CrackUI` 등을 유지합니다.
+
+다른 확장 기능을 배포할 때는 `main` 대신 검증한 커밋 해시로 Raw 주소를 고정하면 업데이트 시점을 직접 관리할 수 있습니다. 자동으로 항상 최신 파일이 로드된다고 가정하지 마세요.
+
+아래 API 예제는 `index.js`가 로드된 환경을 기준으로 하며, `await`는 async 함수 안에서 사용합니다.
 
 ## 실행 환경과 인증
 
@@ -89,7 +83,7 @@ API 호출은 로그인된 크랙 페이지처럼 인증과 API 접근이 가능
 | `request` | `async (path, options) => response` 형태의 사용자 요청기. 지정하면 기본 전송기를 대체 |
 
 ```js
-const community = createCommunityAPI({timeout: 10000});
+const community = Crack.createCommunityAPI({timeout: 10000});
 ```
 
 API 래퍼는 응답에 `data` 필드가 있으면 해당 값을 반환하고, 없으면 원본 응답을 반환합니다. 기본 요청기와 `api.request()`는 전체 응답을 반환합니다.
@@ -110,7 +104,7 @@ API 래퍼는 응답에 `data` 필드가 있으면 해당 값을 반환하고, �
 ### 검색과 프로필 조회
 
 ```js
-import {createDiscoveryAPI, createProfilesAPI} from './dist/core/index.js';
+const {createDiscoveryAPI, createProfilesAPI} = Crack;
 
 const discovery = createDiscoveryAPI();
 const profiles = createProfilesAPI();
@@ -148,7 +142,7 @@ console.log(requestInfo.method, requestInfo.path);
 기존 채팅 API는 `함수(id, options)`처럼 위치 인수를 사용합니다.
 
 ```js
-import {createCrackAPI} from './dist/core/index.js';
+const {createCrackAPI} = Crack;
 const api = createCrackAPI();
 
 const chat = await api.chat.get('CHAT_ID');
@@ -170,6 +164,7 @@ for await (const message of api.chat.messages('CHAT_ID', {max: 20, limit: 20})) 
 ### 취소와 오류 처리
 
 ```js
+const community = Crack.createCommunityAPI();
 const controller = new AbortController();
 
 try {
@@ -194,7 +189,7 @@ try {
 ### 채팅 소켓
 
 ```js
-import {createChatSession} from './dist/core/index.js';
+const {createChatSession} = Crack;
 
 const session = createChatSession({chatId: 'CHAT_ID', kind: 'story'});
 const unsubscribe = session.on('characterMessageGenerated', event => {
@@ -218,7 +213,7 @@ session.close();
 UI 모듈은 페이지의 버튼·입력창·컨테이너를 의미 있는 키로 찾습니다. 이 모듈에는 DOM 연결과 SDK용 패널 삽입 도구가 포함되며, 자체 서버 API는 없습니다.
 
 ```js
-import {createPageUI} from './dist/ui/index.js';
+const {createPageUI} = CrackUI;
 
 const ui = createPageUI();
 const report = ui.inspect('search.input');
@@ -248,19 +243,13 @@ stopWatching();
 
 기본 클릭은 `navigate`와 `local` 효과만 허용합니다. 여러 후보가 있거나 대상이 가려져 있으면 클릭을 중단합니다. 클릭 성공은 화면의 처리 완료를 보장하지 않습니다.
 
-사이트 패치로 요소가 바뀌면 `uiMap.js`의 해당 정의 또는 인스턴스의 `configure()`를 수정하세요. 정의된 105개 키가 모든 화면에서 검증된 것은 아닙니다. 키 목록은 [UI-KEYS.md](UI-KEYS.md)를 참고하세요.
+사이트 패치로 요소가 바뀌면 인스턴스의 `configure()`로 해당 정의를 교체하세요. 정의된 105개 키가 모든 화면에서 검증된 것은 아닙니다. 키 목록은 [UI-KEYS.md](UI-KEYS.md)를 참고하세요.
 
-## 변경할 파일 찾기
+## 사이트 패치에 대응하기
 
-| 문제가 생긴 부분 | 확인할 파일 |
-|---|---|
-| 인증·HTTP·페이지 순회·소켓 연결 | `dist/core/http.js` |
-| 채팅·메시지·메모리·서버 유저노트 | `dist/core/api.js` |
-| 검색·프로필·공지·목록 경로 | `dist/core/`의 해당 기능 파일 |
-| 요청 인수 검사·경로 변수 처리 | `dist/core/endpoints.js` |
-| 페이지 버튼·컨테이너 선택자 | `dist/ui/uiMap.js` |
-| 요소 탐색·중복 판정·클릭 제한 | `dist/ui/uiAdapter.js` |
-| 입력창·DOM·패널 도구 | `dist/ui/ui.js` |
+UI 선택 규칙을 바꿀 때는 `ui.configure(key, definition)`으로 해당 인스턴스의 정의를 교체합니다. API 변경은 새 배포 파일과 변경 문서를 확인해 반영하세요.
+
+2.1.0에서 JavaScript 변경 파일은 `index.js`입니다. 기존 UI 및 기능별 번들은 그대로 사용할 수 있습니다. [메모리 패치 명세](MEMORY-PATCH.md)에는 실제 호출 경로와 제한, 기존 함수와의 차이가 있습니다.
 
 ## 확인 범위
 

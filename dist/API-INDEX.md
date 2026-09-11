@@ -58,3 +58,7 @@
 | library | `chatFolders` | GET | `/crack-gen/chat-folders` | observed-http-status |
 | library | `storyChats` | GET | `/crack-gen/v3/chats` | observed-http-status |
 | library | `characterChats` | GET | `/crack-gen/character-chats` | observed-http-status |
+
+## 요약메모리 — 2.1.0
+
+`createCrackAPI().memory`의 `list`, `canEditGenerated`, `updateShortTerm`, `updateRelationship`, `updateGoal`, `deleteShortTerm`, `deleteRelationship`을 추가했습니다. [경로·요청 본문·사용 제한](MEMORY-PATCH.md)을 참고하세요.

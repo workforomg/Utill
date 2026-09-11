@@ -264,6 +264,18 @@ function isAttendanceTime(now = new Date()) {
   return (now.getUTCHours() + 9) % 24 >= 6;
 }
 
+// Form limits observed in build main-arm64-9ac2473. No eligibility caching or retry.
+function generatedMemoryBody(type, body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) throw new TypeError("Memory body must be an object");
+  const keys = type === "goal" ? ["summary"] : ["title", "summary"];
+  if (Object.keys(body).some(key => !keys.includes(key))) throw new TypeError("Unexpected memory field");
+  const max = type === "shortTerm" ? 300 : 200;
+  if (typeof body.summary !== "string" || body.summary.length < 1 || body.summary.length > max) throw new RangeError(`Memory summary must be 1..${max} characters`);
+  if (type === "goal") return { summary: body.summary };
+  if (typeof body.title !== "string" || body.title.length < 1 || body.title.length > 20) throw new RangeError("Memory title must be 1..20 characters");
+  return { title: body.title, summary: body.summary };
+}
+
 function createCrackAPI(options = {}) {
   const request = options.request ?? createTransport(options);
   const data = async (path, init) => unwrapData(await request(path, init));
@@ -296,12 +308,30 @@ function createCrackAPI(options = {}) {
       setDefaultSettings: (body, options = {}) => data(`${ENDPOINTS.chat}/default-chat-setting`, { ...options, method: "POST", body }),
     }),
     memory: Object.freeze({
+      // One page, preserving metadata. The free-edit window is owned by the server.
+      list: (id, { type = "longTerm", orderBy = "newest", limit = 20, cursor, page, filter, signal } = {}) => {
+        if (!["longTerm", "shortTerm", "relationship", "goal"].includes(type)) throw new TypeError("Unknown memory type");
+        if (!["newest", "oldest"].includes(orderBy)) throw new TypeError("Unknown memory order");
+        if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RangeError("Memory limit must be 1..100");
+        return data(summariesPath(id), { signal, query: { type, orderBy, limit, cursor, page, ...(type === "longTerm" && filter !== undefined ? { filter } : {}) } });
+      },
+      async canEditGenerated(id, options) {
+        const chat = await data(chatPath(id), options);
+        if (typeof chat?.isSummaryFreeEditable !== "boolean") throw new ResponseError("Missing isSummaryFreeEditable state");
+        return chat.isSummaryFreeEditable;
+      },
+      updateShortTerm: (id, summaryId, body, options = {}) => data(`${summariesPath(id)}/${segment(summaryId)}`, { ...options, method: "PATCH", body: generatedMemoryBody("shortTerm", body) }),
+      updateRelationship: (id, summaryId, body, options = {}) => data(`${summariesPath(id)}/${segment(summaryId)}`, { ...options, method: "PATCH", body: generatedMemoryBody("relationship", body) }),
+      updateGoal: (id, summaryId, body, options = {}) => data(`${summariesPath(id)}/${segment(summaryId)}`, { ...options, method: "PATCH", body: generatedMemoryBody("goal", body) }),
+      deleteShortTerm: (id, summaryId, options = {}) => data(`${summariesPath(id)}/${segment(summaryId)}`, { ...options, method: "DELETE" }),
+      deleteRelationship: (id, summaryId, options = {}) => data(`${summariesPath(id)}/${segment(summaryId)}`, { ...options, method: "DELETE" }),
       iterate: summaries,
       export: (id, options = {}) => collect(summaries(id, options), { reverse: options.naturalOrder !== false }),
       create: (id, body, options = {}) => data(summariesPath(id), { ...options, method: "POST", body: { ...body, type: "longTerm" } }),
       update: (id, summaryId, body, options = {}) => data(`${summariesPath(id)}/${segment(summaryId)}`, { ...options, method: "PATCH", body }),
       delete: (id, summaryId, options = {}) => data(`${summariesPath(id)}/${segment(summaryId)}`, { ...options, method: "DELETE" }),
       version: (id, options) => data(`${summariesPath(id)}/version`, options),
+      // Legacy summary replacement; NOT the 2026-09-11 per-memory editor.
       setShortTerm: (id, summary, options = {}) => data(summariesPath(id), { ...options, method: "PUT", body: { summary } }),
       deleteMany: (id, summaryIds, options = {}) => data(summariesPath(id), { ...options, method: "DELETE", body: { summaryIds } }),
       markRead: (id, options = {}) => data(`${summariesPath(id)}/read`, { ...options, method: "POST" }),
