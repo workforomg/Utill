@@ -2,6 +2,8 @@
 // @name         크래커 소멸 알림
 // @namespace    https://github.com/workforomg/Utill
 // @version      1.0.0
+// @updateURL    https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/%ED%81%AC%EB%9E%98%EC%BB%A4%EC%86%8C%EB%A9%B8%EC%95%8C%EB%A6%BC.user.js
+// @downloadURL  https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/%ED%81%AC%EB%9E%98%EC%BB%A4%EC%86%8C%EB%A9%B8%EC%95%8C%EB%A6%BC.user.js
 // @auther       지유지요
 // @description  선입선출 잔여 크래커의 소멸일을 오른쪽 하단 팝업으로 알립니다.
 // @match        https://crack.wrtn.ai/*
