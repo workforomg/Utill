@@ -2,8 +2,8 @@
 // @name         책처럼 읽기
 // @namespace    https://github.com/workforomg/Utill
 // @version      1.0.0
-// @updateURL    
-// @downloadURL  
+// @updateURL    https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/%EC%86%8C%EC%84%A4%EC%B1%85%EB%AA%A8%EB%93%9C.user.js
+// @downloadURL  https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/%EC%86%8C%EC%84%A4%EC%B1%85%EB%AA%A8%EB%93%9C.user.js
 // @author       지유지요
 // @description  입력과 출력을 양면 책으로 읽기. Ctrl+좌우로 펼침 이동, 긴 응답 자동 페이지 분할.
 // @match        https://crack.wrtn.ai/*
