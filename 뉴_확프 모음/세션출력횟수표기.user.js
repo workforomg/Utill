@@ -2,8 +2,8 @@
 // @name         세션 AI 출력 횟수
 // @namespace    https://github.com/workforomg/Utill
 // @version      1.0.1
-// @updateURL    
-// @downloadURL  
+// @updateURL    https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/%EC%84%B8%EC%85%98%EC%B6%9C%EB%A0%A5%ED%9A%9F%EC%88%98%ED%91%9C%EA%B8%B0.user.js
+// @downloadURL  https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/%EC%84%B8%EC%85%98%EC%B6%9C%EB%A0%A5%ED%9A%9F%EC%88%98%ED%91%9C%EA%B8%B0.user.js 
 // @auther       지유지요
 // @description  세션 제목 위에 실제 AI 출력 횟수 표시. 전체 집계, 증분 동기화, 재출력 포함 설정.
 // @match        https://crack.wrtn.ai/*
