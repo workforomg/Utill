@@ -115,7 +115,36 @@
   const hiddenStyle = document.createElement('style');
   hiddenStyle.textContent = '[data-crack-float-hidden="yes"]{display:none!important}';
   document.head.append(hiddenStyle);
-  let hidden = new Set(), lastSignature = '', currentText = '', route = location.href, timer;
+  const sessionKey = () => {
+    const route = CrackUI.parseRoute();
+    return CrackUI.isChatRoute(route) ? `${route.kind}:${route.contentId}:${route.chatId}` : null;
+  };
+  let activeSession = sessionKey();
+  const owners = new WeakMap();
+  const messageOwners = new Map();
+  let hidden = new Set(), lastSignature = '', currentText = '', timer;
+  function checkSession() {
+    const next = sessionKey();
+    host.style.setProperty('display', next ? 'block' : 'none', 'important');
+    if (next === activeSession) return false;
+    activeSession = next;
+    restore(); currentText = ''; pre.textContent = ''; delete pre.dataset.ready;
+    blocks.replaceChildren(); lastSignature = '';
+    status.textContent = next ? '새 세션 블록 대기 중' : '';
+    return true;
+  }
+  function belongsToSession(el) {
+    const id = CrackUI.getMessageId(el);
+    const signature = id ? `id:${id}` : `text:${el.querySelector('pre code')?.textContent || ''}`;
+    const previous = owners.get(el);
+    // A new URL can arrive while React still renders the previous session's nodes.
+    // Keep those nodes quarantined until their message identity changes.
+    if (previous && previous.session !== activeSession && previous.signature === signature) return false;
+    if (id && messageOwners.has(id) && messageOwners.get(id) !== activeSession) return false;
+    owners.set(el, {session:activeSession,signature});
+    if (id) messageOwners.set(id,activeSession);
+    return true;
+  }
   const labelOf = el => el.firstElementChild?.textContent.trim() || '이름 없는 블록';
   function restore() { hidden.forEach(el => el.removeAttribute('data-crack-float-hidden')); hidden.clear(); }
   function geometry() {
@@ -170,11 +199,40 @@
     $('input[type=color]').value = prefs.color || ({markdown:'#24292e',mobile:'#f1f3f8',cyber:'#0b0a1c',paper:'#e9d8b5',note:'#fffdf1'}[prefs.theme] || '#24292e');
     geometry();
   }
+  function latestBlock(matches) {
+    return matches.reduce((latest, candidate) => {
+      if (!latest) return candidate;
+      let parent=latest.parentElement;
+      while (parent && !parent.contains(candidate)) parent=parent.parentElement;
+      if (!parent) return candidate;
+      let a=latest,b=candidate;
+      while (a.parentElement!==parent) a=a.parentElement;
+      while (b.parentElement!==parent) b=b.parentElement;
+      const style=getComputedStyle(parent);
+      const reversed=style.display.includes('flex') && style.flexDirection==='column-reverse';
+      const orderA=Number(getComputedStyle(a).order)||0,orderB=Number(getComputedStyle(b).order)||0;
+      const candidateAfter=style.display.includes('flex') && orderA!==orderB
+        ? orderB>orderA : Boolean(a.compareDocumentPosition(b)&Node.DOCUMENT_POSITION_FOLLOWING);
+      return candidateAfter!==reversed ? candidate : latest;
+    },null);
+  }
   function sync() {
-    if (route !== location.href) { route = location.href; restore(); currentText = ''; pre.textContent = ''; lastSignature = ''; }
+    checkSession();
+    if (!activeSession) return;
     const main = ui.resolve('layout.main');
-    const candidates = CrackUI.isChatRoute(CrackUI.parseRoute()) && main.status === 'found' && main.elements.length === 1
-      ? Array.from(main.elements[0].querySelectorAll('.wrtn-codeblock')).filter(el => el.querySelector('pre code')) : [];
+    // Menu/dialog accessibility isolation is not removal of the chat's data.
+    // This fallback is read-only: never remove aria-hidden/inert or activate controls.
+    const readableMains = () => Array.from(document.querySelectorAll('main,[role="main"]')).filter(el => {
+      if (!el.isConnected || el.closest('[role="menu"],[role="dialog"],dialog')) return false;
+      for (let p=el;p;p=p.parentElement) {
+        const style=getComputedStyle(p);
+        if (p.hidden || style.display==='none' || style.visibility==='hidden' || style.visibility==='collapse') return false;
+      }
+      return el.getClientRects().length>0;
+    });
+    const roots = main.status === 'found' && main.elements.length === 1 ? main.elements : readableMains();
+    const candidates = roots.length === 1
+      ? Array.from(roots[0].querySelectorAll('.wrtn-codeblock')).filter(el => el.querySelector('pre code') && belongsToSession(el)) : [];
     const labels = [...new Set(candidates.map(labelOf))];
     const options = [...new Set([prefs.label, ...labels])];
     const signature = JSON.stringify(options);
@@ -184,7 +242,7 @@
     }
     blocks.value = prefs.label;
     const matches = candidates.filter(el => labelOf(el) === prefs.label);
-    const latest = matches.at(-1);
+    const latest = latestBlock(matches);
     const nextHidden = new Set(prefs.open && prefs.hide ? matches : []);
     hidden.forEach(el => { if (!nextHidden.has(el)) el.removeAttribute('data-crack-float-hidden'); });
     nextHidden.forEach(el => { if (!hidden.has(el)) el.setAttribute('data-crack-float-hidden','yes'); });
@@ -199,13 +257,17 @@
       status.textContent = `동기화됨 · ${new Date().toLocaleTimeString('ko-KR')}`;
     }
   }
-  const schedule = () => { if (!timer) timer = setTimeout(() => { timer = null; sync(); }, 100); };
+  const schedule = () => { checkSession(); if (!timer) timer = setTimeout(() => { timer = null; sync(); }, 100); };
+  const onRouteChange = () => { if (checkSession()) schedule(); };
+  window.navigation?.addEventListener('currententrychange', onRouteChange);
+  window.addEventListener('popstate', onRouteChange);
+  const routeTimer = setInterval(onRouteChange,100);
   // SDK가 DOM 교체·속성 변경·SPA 전환을 담당한다.
   // watchDOM은 characterData를 관찰하지 않으므로 텍스트 노드 스트리밍만 보완한다.
   const stopWatching = CrackUI.watchDOM(schedule, { delay:80 });
   const textObserver = new MutationObserver(schedule);
   textObserver.observe(document.body, { subtree:true, characterData:true });
-  window.addEventListener('pagehide', event => { if (!event.persisted) { stopWatching(); textObserver.disconnect(); clearTimeout(timer); } });
+  window.addEventListener('pagehide', event => { if (!event.persisted) { stopWatching(); textObserver.disconnect(); clearTimeout(timer); clearInterval(routeTimer); window.navigation?.removeEventListener('currententrychange',onRouteChange); window.removeEventListener('popstate',onRouteChange); } });
   $('.settings-toggle').onclick = () => { const settings = $('.settings'); settings.hidden = !settings.hidden; $('.settings-toggle').setAttribute('aria-expanded', String(!settings.hidden)); if (!settings.hidden && prefs.folded) { prefs.folded = false; appearance(); save(); } };
   $('.fold').onclick = () => { prefs.folded = !prefs.folded; appearance(); save(); };
   $('.close').onclick = () => { prefs.open = false; appearance(); restore(); save(); };
