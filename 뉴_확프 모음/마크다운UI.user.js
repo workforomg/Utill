@@ -2,8 +2,8 @@
 // @name         떠 있는 마크다운 UI
 // @namespace    https://github.com/workforomg/Utill
 // @version      1.0.0
-// @updateURL    
-// @downloadURL  
+// @updateURL    https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/%EB%A7%88%ED%81%AC%EB%8B%A4%EC%9A%B4UI.user.js
+// @downloadURL  https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/%EB%A7%88%ED%81%AC%EB%8B%A4%EC%9A%B4UI.user.js
 // @author       지유지요
 // @description  최신 코드 블록 동기화, 이동·크기 조절, 다섯 가지 테마와 사용자 배경
 // @match        https://crack.wrtn.ai/*
