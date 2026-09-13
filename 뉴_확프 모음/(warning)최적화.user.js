@@ -2,8 +2,8 @@
 // @name         최적화
 // @namespace    https://github.com/workforomg/Utill
 // @version      0.1.0
-// @updateURL    
-// @downloadURL  
+// @updateURL    https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/(warning)%EC%B5%9C%EC%A0%81%ED%99%94.user.js
+// @downloadURL  https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/(warning)%EC%B5%9C%EC%A0%81%ED%99%94.user.js
 // @author       지유지요
 // @description  저사양 모드·데이터 API 이미지 사전 최적화·긴 이미지 분할·움짤 정지·작품 카드 렌더링·화면 효과를 설정 메뉴에서 관리합니다.
 // @match        https://crack.wrtn.ai/*
