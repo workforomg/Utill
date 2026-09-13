@@ -27,6 +27,7 @@
   const save = () => { try { if (typeof GM_setValue === 'function') GM_setValue(KEY, prefs); else localStorage.setItem(KEY, JSON.stringify(prefs)); } catch { status.textContent = '설정을 저장하지 못했어요'; } };
   const host = document.createElement('div');
   host.id = 'crack-floating-markdown';
+  host.dataset.version = '2.1.4';
   host.style.cssText = 'position:fixed!important;inset:0!important;width:0!important;height:0!important;z-index:2147483000!important;';
   const root = host.attachShadow({ mode: 'open' });
   root.innerHTML = `
@@ -102,7 +103,8 @@
           <label><span>사진 배치</span><select class="image-fit" aria-label="배경 사진 배치"><option value="contain">전체 보이기 · 비율 유지</option><option value="cover">영역 채우기 · 일부 잘림</option></select></label>
           <p class="help skin-help"></p>
           <label><input class="hide-original" type="checkbox">본문의 같은 종류 블록 숨기기</label>
-          <p class="help">같은 이름의 마지막 블록을 따라갑니다. 배경 사진은 2MB 이하, 이 브라우저에만 저장됩니다.</p>
+          <p class="help">같은 이름의 최신 블록을 따라갑니다. 배경 사진은 2MB 이하, 이 브라우저에만 저장됩니다.</p>
+          <p class="help">버전 2.1.4 · 초기 로딩 자동 복구</p>
         </div>
         <div class="content"><pre></pre></div>
         <footer><span class="status" role="status">블록을 찾는 중…</span><button class="copy">복사</button></footer>
@@ -125,7 +127,8 @@
   let hidden = new Set(), lastSignature = '', currentText = '', timer;
   function checkSession() {
     const next = sessionKey();
-    host.style.setProperty('display', next ? 'block' : 'none', 'important');
+    const display=next ? 'block' : 'none';
+    if(host.style.display!==display) host.style.setProperty('display',display,'important');
     if (next === activeSession) return false;
     activeSession = next;
     restore(); currentText = ''; pre.textContent = ''; delete pre.dataset.ready;
@@ -217,6 +220,8 @@
     },null);
   }
   function sync() {
+    if (!host.isConnected) document.body.append(host);
+    if (!hiddenStyle.isConnected) document.head.append(hiddenStyle);
     checkSession();
     if (!activeSession) return;
     const main = ui.resolve('layout.main');
@@ -262,12 +267,17 @@
   window.navigation?.addEventListener('currententrychange', onRouteChange);
   window.addEventListener('popstate', onRouteChange);
   const routeTimer = setInterval(onRouteChange,100);
+  // Stylesheet loading/layout changes need not mutate observed DOM. Reconcile
+  // after load and periodically, also recovering from hydration removing our host.
+  window.addEventListener('load',schedule);
+  window.addEventListener('pageshow',schedule);
+  const recoveryTimer = setInterval(() => { if (sessionKey()) schedule(); },1000);
   // SDK가 DOM 교체·속성 변경·SPA 전환을 담당한다.
   // watchDOM은 characterData를 관찰하지 않으므로 텍스트 노드 스트리밍만 보완한다.
   const stopWatching = CrackUI.watchDOM(schedule, { delay:80 });
   const textObserver = new MutationObserver(schedule);
   textObserver.observe(document.body, { subtree:true, characterData:true });
-  window.addEventListener('pagehide', event => { if (!event.persisted) { stopWatching(); textObserver.disconnect(); clearTimeout(timer); clearInterval(routeTimer); window.navigation?.removeEventListener('currententrychange',onRouteChange); window.removeEventListener('popstate',onRouteChange); } });
+  window.addEventListener('pagehide', event => { if (!event.persisted) { stopWatching(); textObserver.disconnect(); clearTimeout(timer); clearInterval(routeTimer); clearInterval(recoveryTimer); window.removeEventListener('load',schedule);window.removeEventListener('pageshow',schedule); window.navigation?.removeEventListener('currententrychange',onRouteChange); window.removeEventListener('popstate',onRouteChange); } });
   $('.settings-toggle').onclick = () => { const settings = $('.settings'); settings.hidden = !settings.hidden; $('.settings-toggle').setAttribute('aria-expanded', String(!settings.hidden)); if (!settings.hidden && prefs.folded) { prefs.folded = false; appearance(); save(); } };
   $('.fold').onclick = () => { prefs.folded = !prefs.folded; appearance(); save(); };
   $('.close').onclick = () => { prefs.open = false; appearance(); restore(); save(); };
