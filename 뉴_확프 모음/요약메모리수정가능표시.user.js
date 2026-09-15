@@ -2,8 +2,8 @@
 // @name         요약메모리 수정가능 표시
 // @namespace    https://github.com/workforomg/Utill
 // @version      0.5.0
-// @updateURL    
-// @downloadURL  
+// @updateURL    https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/%EC%9A%94%EC%95%BD%EB%A9%94%EB%AA%A8%EB%A6%AC%EC%88%98%EC%A0%95%EA%B0%80%EB%8A%A5%ED%91%9C%EC%8B%9C.user.js
+// @downloadURL  https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/%EC%9A%94%EC%95%BD%EB%A9%94%EB%AA%A8%EB%A6%AC%EC%88%98%EC%A0%95%EA%B0%80%EB%8A%A5%ED%91%9C%EC%8B%9C.user.js
 // @author       지유지요
 // @description  요약메모리 편집이 가능할때 알림 혹은 요약메모리 모달을 표시합니다
 // @match        https://crack.wrtn.ai/*
