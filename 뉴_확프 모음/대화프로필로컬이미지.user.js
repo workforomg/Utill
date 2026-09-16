@@ -2,8 +2,8 @@
 // @name         대화 프로필 로컬 이미지
 // @namespace    https://github.com/workforomg/Utill
 // @version      1.0.0
-// @updateURL    
-// @downloadURL  
+// @updateURL    https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/%EB%8C%80%ED%99%94%ED%94%84%EB%A1%9C%ED%95%84%EB%A1%9C%EC%BB%AC%EC%9D%B4%EB%AF%B8%EC%A7%80.user.js
+// @downloadURL  https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/%EB%8C%80%ED%99%94%ED%94%84%EB%A1%9C%ED%95%84%EB%A1%9C%EC%BB%AC%EC%9D%B4%EB%AF%B8%EC%A7%80.user.js
 // @author       지유지요
 // @description  대화 프로필별 이미지를 로컬에 저장하고, 선택한 이미지를 전송된 유저 메시지 위에 표시합니다. 이미지/이름을 채팅 서버에 전송하지 않습니다.
 // @match        https://crack.wrtn.ai/*
