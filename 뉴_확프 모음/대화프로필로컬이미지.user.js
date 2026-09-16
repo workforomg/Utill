@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         대화 프로필 로컬 이미지
 // @namespace    https://github.com/workforomg/Utill
-// @version      1.0.0
+// @version      1.0.5
 // @updateURL    https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/%EB%8C%80%ED%99%94%ED%94%84%EB%A1%9C%ED%95%84%EB%A1%9C%EC%BB%AC%EC%9D%B4%EB%AF%B8%EC%A7%80.user.js
 // @downloadURL  https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/%EB%8C%80%ED%99%94%ED%94%84%EB%A1%9C%ED%95%84%EB%A1%9C%EC%BB%AC%EC%9D%B4%EB%AF%B8%EC%A7%80.user.js
 // @author       지유지요
@@ -49,7 +49,7 @@
     route: { kind: 'other', chatId: null }, href: '', epoch: 0,
     accountId: null, profiles: new Map(), profileLists: new Map(), chats: new Map(),
     profileId: null, profileKnown: false, catalog: null, catalogKey: '', catalogListener: null,
-    selected: null, selectionVersion: 0, profileVersion: new Map(),
+    selected: null, selectionMode: 'default', selectionVersion: 0, profileVersion: new Map(),
     messages: new Map(), links: new Map(), linkListeners: new Map(),
     pending: new Map(), edits: new Map(), httpEdits: new Map(),
     composer: null, composerSignature: '', modal: null, managerRequest: 0, menuContext: null,
@@ -112,13 +112,41 @@
     clearTimeout(region._cpiTimer);
     region._cpiTimer = setTimeout(() => region.remove(), 5500);
   }
-  const emptyCatalog = (accountId, profileId) => ({ schema: 1, accountId, profileId, revision: '', images: [] });
+  const emptyCatalog = (accountId, profileId) => ({ schema: 1, accountId, profileId, revision: '', defaultImageId: null, images: [] });
   function validCatalog(value, accountId, profileId) {
     if (!value) return emptyCatalog(accountId, profileId);
     if (value.schema !== 1 || value.accountId !== accountId || value.profileId !== profileId || !Array.isArray(value.images)) {
       throw new Error('이미지 설정의 저장 형식이 다릅니다. 기존 데이터는 덮어쓰지 않았습니다.');
     }
-    return value;
+    // Older catalogs have no defaultImageId. Missing/removed defaults mean NONE,
+    // never the first image. Keep schema/storage keys and existing assets intact.
+    return { ...value, defaultImageId: defaultCatalogImage(value)?.id || null };
+  }
+  function defaultCatalogImage(catalog) {
+    const defaultId = id(catalog?.defaultImageId);
+    return defaultId && Array.isArray(catalog?.images) ? catalog.images.find(image => image?.id === defaultId) || null : null;
+  }
+  function setComposerSelection(image, mode = 'manual') {
+    state.selected = image || null; state.selectionMode = mode; state.selectionVersion++;
+  }
+  function resetComposerSelection() {
+    const catalog = state.catalog;
+    const image = catalog?.accountId === state.accountId && catalog?.profileId === state.profileId ? defaultCatalogImage(catalog) : null;
+    if (state.selectionMode !== 'default' || (state.selected?.id || null) !== (image?.id || null)) state.selectionVersion++;
+    state.selected = image; state.selectionMode = 'default';
+  }
+  function applyComposerCatalog(catalog, { resetSelection = false } = {}) {
+    if (catalog.accountId !== state.accountId || catalog.profileId !== state.profileId) return;
+    state.catalog = catalog; state.catalogKey = profileKey(catalog.accountId, catalog.profileId);
+    if (resetSelection || state.selectionMode === 'default') resetComposerSelection();
+    else if (state.selected) {
+      // A manual choice survives catalog refreshes, but not removal of that image.
+      const image = catalog.images.find(item => item.id === state.selected.id);
+      if (image) state.selected = image;
+      else resetComposerSelection();
+    }
+    // Explicit manual NONE also survives refreshes until this message is sent.
+    state.composerSignature = ''; scheduleRefresh();
   }
 
   // ---------------------------------------------------------------------------
@@ -242,7 +270,7 @@
     state.links.clear();
     detachLinkListeners();
     state.catalog = null; state.catalogKey = '';
-    state.selected = null; state.selectionVersion++;
+    state.selected = null; state.selectionMode = 'default'; state.selectionVersion++;
     state.edits.clear();
     state.composerSignature = '';
     if (state.profileLists.has(accountId)) acceptProfiles(accountId, state.profileLists.get(accountId));
@@ -280,7 +308,7 @@
   function applyChatProfile(profileId, known) {
     if (state.profileId !== profileId || state.profileKnown !== known) {
       state.profileId = profileId; state.profileKnown = known;
-      state.selected = null; state.selectionVersion++;
+      state.selected = null; state.selectionMode = 'default'; state.selectionVersion++;
       state.catalog = null; state.catalogKey = '';
       state.composerSignature = '';
     }
@@ -309,22 +337,19 @@
     const key = profileKey(state.accountId, state.profileId);
     if (state.catalogKey === key) return;
     state.catalogKey = key;
-    const accountId = state.accountId, profileId = state.profileId;
+    const accountId = state.accountId, profileId = state.profileId, epoch = state.epoch;
+    const stillCurrent = () => state.catalogKey === key && state.accountId === accountId && state.profileId === profileId && state.epoch === epoch;
     let value;
     try { value = validCatalog(await read(key), accountId, profileId); }
-    catch (e) { if (state.catalogKey === key) state.catalogKey = ''; throw e; }
-    if (state.catalogKey !== key) return;
-    state.catalog = value;
+    catch (e) { if (stillCurrent()) state.catalogKey = ''; throw e; }
+    if (!stillCurrent()) return;
+    applyComposerCatalog(value);
     if (state.catalogListener != null && typeof GM_removeValueChangeListener === 'function') GM_removeValueChangeListener(state.catalogListener);
     state.catalogListener = typeof GM_addValueChangeListener === 'function' ? GM_addValueChangeListener(key, (_k, _old, next) => {
-      if (state.catalogKey !== key) return;
-      try {
-        state.catalog = validCatalog(next, accountId, profileId);
-        if (state.selected && !state.catalog.images.some(img => img.id === state.selected.id)) state.selected = null;
-        state.composerSignature = ''; scheduleRefresh();
-      } catch (e) { report(e, '다른 탭의 이미지 설정'); }
+      if (!stillCurrent()) return;
+      try { applyComposerCatalog(validCatalog(next, accountId, profileId)); }
+      catch (e) { report(e, '다른 탭의 이미지 설정'); }
     }) : null;
-    state.composerSignature = ''; scheduleRefresh();
   }
   function hydrateChat() {
     const key = `${state.epoch}/${state.route.kind}/${state.route.chatId}`;
@@ -573,17 +598,20 @@
     if (packet.type !== '2' || packet.data[0] !== 'send') return null;
     const body = packet.data[1];
     if (!body || typeof body.message !== 'string' || !id(body.chatId)) return null;
-    if (body.chatId !== state.route.chatId || !state.accountId || !state.profileKnown || !state.selected) return null;
+    if (body.chatId !== state.route.chatId || !state.accountId || !state.profileKnown) return null;
+    // Track explicit NONE too when a default exists, so the NEXT message returns
+    // to the default. Observe only: never insert image data into the native packet.
+    if (!state.selected && !defaultCatalogImage(state.catalog)) return null;
     const ackKey = packet.ack ? `${socketId}/${packet.namespace}/${packet.ack}` : null;
     if (ackKey && [...state.pending.values()].some(p => p.ackKey === ackKey)) return null;
     const tx = {
       txId: uuid(), ackKey, socketId, namespace: packet.namespace,
       accountId: state.accountId, chatId: body.chatId, profileId: state.profileId,
-      image: { ...state.selected }, text: norm(body.message), sentAt: Date.now(),
+      image: state.selected ? { ...state.selected } : null, text: norm(body.message), sentAt: Date.now(),
       selectionVersion: state.selectionVersion, committing: false,
       baselineIds: new Set(state.messages.keys()),
     };
-    tx.timer = setTimeout(() => failPending(tx, '확정된 유저 메시지를 확인하지 못해 이미지를 연결하지 않았습니다. 선택은 유지됩니다.'), CONFIG.pendingMs);
+    tx.timer = setTimeout(() => failPending(tx, tx.image ? '확정된 유저 메시지를 확인하지 못해 이미지를 연결하지 않았습니다. 선택은 유지됩니다.' : '전송 결과를 확인하지 못해 현재 선택을 유지했습니다.'), CONFIG.pendingMs);
     state.pending.set(tx.txId, tx); state.counters.sends++;
     return tx;
   }
@@ -636,10 +664,13 @@
     // Repeated text is never mapped to an arbitrary row; ambiguous matches stay pending.
     if (candidates.length === 1) {
       const tx = candidates[0]; tx.committing = true; clearTimeout(tx.timer);
-      saveLink(tx.accountId, chatId, message._id, tx.profileId, tx.image).then(() => {
-        state.pending.delete(tx.txId); state.counters.linked++;
-        if (state.accountId === tx.accountId && state.route.chatId === chatId && state.selectionVersion === tx.selectionVersion) {
-          state.selected = null; state.selectionVersion++; state.composerSignature = '';
+      // NONE creates no image link or tombstone. Only a confirmed new message
+      // resets the composer; ACKs, keypresses, edits and failed sends do not.
+      const saved = tx.image ? saveLink(tx.accountId, chatId, message._id, tx.profileId, tx.image) : Promise.resolve();
+      saved.then(() => {
+        state.pending.delete(tx.txId); if (tx.image) state.counters.linked++;
+        if (state.accountId === tx.accountId && state.route.chatId === chatId && state.profileId === tx.profileId && state.selectionVersion === tx.selectionVersion) {
+          resetComposerSelection(); state.composerSignature = '';
         }
         scheduleRefresh();
       }).catch(error => {
@@ -737,10 +768,12 @@
     const { accountId, profileId } = modal;
     if (state.accountId !== accountId) throw new Error('로그인 계정이 바뀌어 저장을 중단했습니다.');
     const key = profileKey(accountId, profileId);
+    const images = modal.images.map(image => ({ ...image }));
+    const defaultImageId = defaultCatalogImage({ images, defaultImageId: modal.defaultImageId })?.id || null;
     const save = async () => {
       const current = validCatalog(await read(key), accountId, profileId);
       if (current.revision !== modal.baseRevision) throw new Error('다른 탭에서 이미지 설정이 변경되었습니다. 창을 다시 열어 확인해 주세요.');
-      for (const image of modal.images) {
+      for (const image of images) {
         if (!String(image.name).trim()) throw new Error('모든 이미지의 이름을 입력해 주세요.');
         if (image._file) {
           // No fetch, XHR, FormData, or upload endpoint is used for image files.
@@ -750,13 +783,12 @@
       }
       // Metadata is committed last. A failed asset write never replaces the catalog.
       const next = {
-        schema: 1, accountId, profileId, revision: uuid(), updatedAt: Date.now(),
-        images: modal.images.map(image => ({ ...publicImage(image), name: image.name.trim().slice(0, 80) })),
+        schema: 1, accountId, profileId, revision: uuid(), updatedAt: Date.now(), defaultImageId,
+        images: images.map(image => ({ ...publicImage(image), name: image.name.trim().slice(0, 80) })),
       };
+      if (state.accountId !== accountId) throw new Error('로그인 계정이 바뀌어 저장을 중단했습니다.');
       await write(key, next);
-      if (state.accountId === accountId && state.profileId === profileId) {
-        state.catalog = next; state.catalogKey = key; state.composerSignature = '';
-      }
+      applyComposerCatalog(next, { resetSelection: true });
       return next;
     };
     if (navigator.locks?.request) return navigator.locks.request(`cpi:${key}`, save);
@@ -866,6 +898,16 @@
       .cpi-small,.cpi-empty { font-size:12px;line-height:1.6;color:var(--text_secondary,var(--cpi-dim)); }
       .cpi-empty { padding:22px 6px;text-align:center; }
       .cpi-remove { padding:2px 7px;min-height:26px;font-size:12px; }
+      .cpi-row-actions { display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-width:0;margin-top:0; }
+      .cpi-row-actions .cpi-remove { flex:0 0 auto;margin-left:auto;font-size:11px;padding-inline:6px; }
+      .cpi-default-label { display:inline-flex;align-items:center;gap:5px;min-width:0;min-height:28px;color:var(--text_primary,var(--cpi-fg));font:500 12px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;cursor:pointer; }
+      .cpi-default-label span { word-break:keep-all; }
+      .cpi-default-check { appearance:auto;display:block;position:static;flex:0 0 15px;width:15px;height:15px;min-width:15px;margin:0;padding:0;accent-color:var(--text_brand,var(--cpi-accent));cursor:pointer; }
+      .cpi-default-check:focus-visible { outline:2px solid var(--text_brand,var(--cpi-accent));outline-offset:2px; }
+      .cpi-default-check:disabled { cursor:not-allowed;opacity:.5; }
+      .cpi-default-help { margin:0 0 12px;white-space:pre-line; }
+      @media (max-width:400px) { .cpi-image-row { grid-template-columns:52px minmax(0,1fr);gap:8px;padding:10px; } .cpi-thumb-large { width:52px;height:52px; } .cpi-row-actions { gap:5px; } .cpi-default-label { font-size:11px;gap:4px; } .cpi-row-actions .cpi-remove { padding-inline:4px;font-size:11px; } }
+
       .cpi-error { color:var(--text_negative,#d94632);white-space:pre-line; }
       /* A fixed compact row; percentage flex-basis must NEVER be used here. */
       [data-cpi-owned].cpi-strip { display:block;flex:0 0 auto;align-self:stretch;width:100%;min-width:0;max-width:100%;height:32px;min-height:32px;max-height:32px;margin:0;padding:0;border:0;background:transparent;overflow:hidden; }
@@ -942,7 +984,7 @@
       // The target cannot change while the modal is open (even if the session changes).
       Object.defineProperties(modal, { accountId: { value: accountId }, profileId: { value: profileId } });
       modal.root.setAttribute('data-cpi-profile-id', profileId);
-      Object.assign(modal, { images: catalog.images.map(image => ({ ...image })), baseRevision: catalog.revision });
+      Object.assign(modal, { images: catalog.images.map(image => ({ ...image })), baseRevision: catalog.revision, defaultImageId: catalog.defaultImageId });
       const toolbar = el('div', { class: 'cpi-toolbar' });
       const picker = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/gif,image/webp,image/avif', multiple: '', hidden: '' });
       const count = el('span', { class: 'cpi-small' });
@@ -950,10 +992,20 @@
       toolbar.append(add, count, picker);
       const list = el('div', { class: 'cpi-list' });
       const error = el('p', { class: 'cpi-small cpi-error', role: 'status' });
-      modal.body.append(toolbar, list, error, el('p', { class: 'cpi-small' }, '여러 장을 한 번에 선택할 수 있습니다. 한 장 20MB 이하. 목록에서 빼도 과거 메시지에 연결된 원본은 보존합니다.'));
+      const help = el('p', { class: 'cpi-small cpi-default-help', id: `cpi-default-help-${uuid()}` }, '선택된 기본설정 이미지가 없으면, 선택 안 함이 기본이 됩니다.\n선택 시, 매 입력 때마다 해당 이미지가 자동 선택됩니다.');
+      modal.body.append(toolbar, help, list, error, el('p', { class: 'cpi-small' }, '여러 장을 한 번에 선택할 수 있습니다. 한 장 20MB 이하. 목록에서 빼도 과거 메시지에 연결된 원본은 보존합니다.'));
+      const defaultChecks = new Map();
+      const syncDefaultChecks = () => {
+        for (const [imageId, check] of defaultChecks) check.checked = imageId === modal.defaultImageId;
+      };
+      const setBusy = busy => {
+        modal.busy = busy; add.disabled = busy; save.disabled = busy; cancel.disabled = busy; picker.disabled = busy;
+        modal.root.setAttribute('aria-busy', String(busy));
+        for (const control of list.querySelectorAll('input,button')) control.disabled = busy;
+      };
       const render = () => {
         count.textContent = `${modal.images.length}장`;
-        list.replaceChildren();
+        list.replaceChildren(); defaultChecks.clear();
         if (!modal.images.length) list.append(el('div', { class: 'cpi-empty' }, '이미지를 불러온 뒤 이름을 정해 주세요.'));
         for (const image of modal.images) {
           const row = el('div', { class: 'cpi-image-row' });
@@ -961,9 +1013,31 @@
           const fields = el('div', { class: 'cpi-row-fields' });
           const name = el('input', { class: 'cpi-name', type: 'text', maxlength: '80', 'aria-label': '이미지 이름', placeholder: '이미지 이름' });
           name.value = image.name;
-          name.addEventListener('input', () => { image.name = name.value; modal.dirty = true; });
-          const remove = button('목록에서 빼기', () => { if (modal.busy) return; modal.images = modal.images.filter(item => item.id !== image.id); modal.dirty = true; render(); }, 'cpi-button cpi-remove');
-          fields.append(name, el('span', { class: 'cpi-small' }, `${image.width} × ${image.height} · ${(image.size / 1024 / 1024).toFixed(1)}MB`), remove);
+          name.addEventListener('input', () => {
+            if (modal.busy) { name.value = image.name; return; }
+            image.name = name.value; modal.dirty = true;
+            check.setAttribute('aria-label', `${image.name || '이미지'} · 기본설정 이미지`);
+          });
+          const actions = el('div', { class: 'cpi-row-actions' });
+          const defaultLabel = el('label', { class: 'cpi-default-label' });
+          const check = el('input', { type: 'checkbox', class: 'cpi-default-check', 'data-cpi-default-image': image.id, 'aria-label': `${image.name} · 기본설정 이미지`, 'aria-describedby': help.id });
+          check.checked = image.id === modal.defaultImageId; defaultChecks.set(image.id, check);
+          check.addEventListener('change', () => {
+            if (modal.busy) { syncDefaultChecks(); return; }
+            // A nullable ID gives checkbox-style deselection with radio-style
+            // exclusivity. Checking another image clears the previous checkbox.
+            modal.defaultImageId = check.checked ? image.id : null;
+            modal.dirty = true; syncDefaultChecks();
+          });
+          defaultLabel.append(check, el('span', {}, '기본설정 이미지'));
+          const remove = button('목록에서 빼기', () => {
+            if (modal.busy) return;
+            modal.images = modal.images.filter(item => item.id !== image.id);
+            if (modal.defaultImageId === image.id) modal.defaultImageId = null;
+            modal.dirty = true; render();
+          }, 'cpi-button cpi-remove');
+          actions.append(defaultLabel, remove);
+          fields.append(name, el('span', { class: 'cpi-small' }, `${image.width} × ${image.height} · ${(image.size / 1024 / 1024).toFixed(1)}MB`), actions);
           row.append(fields); list.append(row);
         }
       };
@@ -972,7 +1046,7 @@
         if (files.length > CONFIG.maxBatchFiles || files.length + modal.images.length > CONFIG.maxProfileImages) {
           error.textContent = '한 번에 최대 50장, 프로필당 최대 200장까지 불러올 수 있습니다.'; return;
         }
-        modal.busy = true; add.disabled = true; save.disabled = true; error.textContent = '';
+        setBusy(true); error.textContent = '';
         const errors = [];
         try {
           // Sequential thumbnailing avoids decoding a whole batch at once on mobile.
@@ -983,19 +1057,19 @@
             if (modal.disposed) return;
           }
         } finally {
-          modal.busy = false; add.disabled = false; save.disabled = false;
+          setBusy(false);
           if (!modal.disposed) { render(); error.textContent = errors.join('\n'); }
         }
       }, '이미지 불러오기'));
       const cancel = button('취소', () => modal.close());
       const save = button('저장하기', async () => {
         if (modal.busy) return;
-        modal.busy = true; save.disabled = true; add.disabled = true; error.textContent = ''; save.textContent = '저장 중…';
+        setBusy(true); error.textContent = ''; save.textContent = '저장 중…';
         try {
           await saveCatalogDraft(modal); modal.dirty = false;
           modal.close(true); notify('이미지 설정을 저장했습니다.'); scheduleRefresh();
         } catch (e) { report(e, '이미지 설정 저장'); error.textContent = e.message; }
-        finally { modal.busy = false; save.disabled = false; add.disabled = false; save.textContent = '저장하기'; }
+        finally { setBusy(false); save.textContent = '저장하기'; }
       }, 'cpi-button cpi-primary');
       modal.footer.append(cancel, save); render();
     } catch (e) { report(e, '이미지 설정 열기'); notify(e.message); }
@@ -1242,7 +1316,7 @@
     state.composer = buildStrip({
       label, images: state.catalog?.images || [], selected: state.selected,
       extraClass: 'cpi-composer-slot',
-      onSelect: image => { state.selected = image; state.selectionVersion++; },
+      onSelect: image => setComposerSelection(image),
       onSettings: state.profileId ? () => openManager(state.profileId, { themeSource: input.parentElement }) : null,
       themeSource: input.parentElement,
     });
@@ -1699,7 +1773,7 @@
   function changeRoute(route) {
     state.route = route; state.epoch++;
     state.profileId = null; state.profileKnown = false; state.catalog = null; state.catalogKey = '';
-    state.selected = null; state.selectionVersion++; state.composerSignature = '';
+    state.selected = null; state.selectionMode = 'default'; state.selectionVersion++; state.composerSignature = '';
     state.links.clear(); detachLinkListeners(); state.menuContext = null;
     roleRequests.clear(); cleanEdits();
     for (const host of pictures.keys()) removePicture(host);
@@ -1796,7 +1870,7 @@
   }
   function diagnostics() {
     return {
-      version: '1.0.7', sdkReady: state.ready, hooks: state.hooks,
+      version: '1.0.5', sdkReady: state.ready, hooks: state.hooks,
       theme: currentTheme(document.body), modalProfileId: state.modal?.profileId || null,
       menuProfileId: state.menuContext?.profileId || null,
       profileSettingsPage: isProfileSettingsPage(), menuSurface: state.menuContext?.kind || null,
@@ -1805,6 +1879,7 @@
       accountDetected: !!state.accountId, profileDetected: state.profileKnown,
       profileId: state.profileId, profileCount: state.profiles.size,
       imageCount: state.catalog?.images.length || 0,
+      defaultImageId: defaultCatalogImage(state.catalog)?.id || null, selectionMode: state.selectionMode,
       mountedGroups: document.querySelectorAll(GROUP).length,
       fullWidthImageRows: document.querySelectorAll('[data-cpi-picture-row]').length,
       nativeEditorDetected: !!promptElement(), pendingImageLinks: state.pending.size,
