@@ -2,8 +2,8 @@
 // @name         이전 신작들
 // @namespace    https://github.com/workforomg/Utill
 // @version      1.0.0
-// @updateURL    
-// @downloadURL  
+// @updateURL    https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/%EC%9D%B4%EC%A0%84%EC%8B%A0%EC%9E%91.user.js
+// @downloadURL  https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/%EC%9D%B4%EC%A0%84%EC%8B%A0%EC%9E%91.user.js
 // @author       지유지요
 // @description  오늘 신작을 중복 없이 7일간 기록합니다. 날짜별 조회, isAdult 기반 모두·세이프·언세이프 필터와 실제 상세페이지 이동을 지원합니다.
 // @match        https://crack.wrtn.ai/*
