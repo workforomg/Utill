@@ -2,8 +2,8 @@
 // @name         유저노트 랜덤 키워드 생성기
 // @namespace    https://github.com/workforomg/Utill
 // @version      1.0.0
-// @updateURL    
-// @downloadURL  
+// @updateURL    https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/%EC%9C%A0%EC%A0%80%EB%85%B8%ED%8A%B8%EB%9E%9C%EB%8D%A4%ED%82%A4%EC%9B%8C%EB%93%9C%EC%83%9D%EC%84%B1.user.js
+// @downloadURL  https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/%EC%9C%A0%EC%A0%80%EB%85%B8%ED%8A%B8%EB%9E%9C%EB%8D%A4%ED%82%A4%EC%9B%8C%EB%93%9C%EC%83%9D%EC%84%B1.user.js
 // @author       지유지요
 // @description  카테고리·장르·개수로 유저노트를 무작위 조합합니다.
 // @match        https://crack.wrtn.ai/*
