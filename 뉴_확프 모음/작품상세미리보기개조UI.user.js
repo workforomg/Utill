@@ -2,8 +2,8 @@
 // @name         작품 상세 미리보기 개조 UI
 // @namespace    https://github.com/workforomg/Utill
 // @version      1.0.0
-// @updateURL    
-// @downloadURL  
+// @updateURL    https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/%EC%9E%91%ED%92%88%EC%83%81%EC%84%B8%EB%AF%B8%EB%A6%AC%EB%B3%B4%EA%B8%B0%EA%B0%9C%EC%A1%B0UI.user.js
+// @downloadURL  https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/%EC%9E%91%ED%92%88%EC%83%81%EC%84%B8%EB%AF%B8%EB%A6%AC%EB%B3%B4%EA%B8%B0%EA%B0%9C%EC%A1%B0UI.user.js
 // @author       지유지요
 // @description  스토리·캐릭터 상세를 2단으로 확장하고 정보·웹툰 탭을 자동 적용합니다.
 // @match        https://crack.wrtn.ai/*
