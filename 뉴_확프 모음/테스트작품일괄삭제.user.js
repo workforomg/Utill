@@ -2,8 +2,8 @@
 // @name         동일한 테스트작품 에피소드 일괄 삭제
 // @namespace    https://github.com/workforomg/Utill
 // @version      1.0.0
-// @updateURL    
-// @downloadURL  
+// @updateURL    https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%9E%91%ED%92%88%EC%9D%BC%EA%B4%84%EC%82%AD%EC%A0%9C.user.js
+// @downloadURL  https://github.com/workforomg/Utill/raw/refs/heads/main/%EB%89%B4_%ED%99%95%ED%94%84%20%EB%AA%A8%EC%9D%8C/%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%9E%91%ED%92%88%EC%9D%BC%EA%B4%84%EC%82%AD%EC%A0%9C.user.js
 // @author       지유지요
 // @description  작품 ID가 같은 세션을 선택하고 원본 작품 제목을 입력한 뒤 API로 삭제합니다.
 // @match        https://crack.wrtn.ai/*
